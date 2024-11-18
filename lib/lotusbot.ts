@@ -58,6 +58,7 @@ export default class LotusBot {
    */
   init = async () => {
     process.on('SIGINT', this._shutdown);
+    process.on('SIGTERM', this._shutdown);
     try {
       /**
        * Initialize Prisma module:  
