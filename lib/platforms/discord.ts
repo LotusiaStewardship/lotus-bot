@@ -154,7 +154,7 @@ implements Platform {
   /** Deactivate the bot */
   stop = async () => {
     // clearInterval(this.activityInterval);
-    this.client.destroy();
+    this.client?.destroy();
   };
   getBotId = () => this.clientId;
 

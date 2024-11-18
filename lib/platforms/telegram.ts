@@ -71,9 +71,9 @@ implements Platform {
     await this.bot.telegram.getMe()
   };
   stop = async () => {
-    this.bot.stop();
+    this.bot?.stop();
   };
-  getBotId = () => this.bot.botInfo?.id.toString();
+  getBotId = () => this.bot.botInfo?.id?.toString();
   notifyUser = async (
     platformOrChatId: string | number,
     msg: string,
