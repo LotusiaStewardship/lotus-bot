@@ -1,5 +1,6 @@
 import { PrismaClient } from '../prisma/prisma-client-js'
-import { AccountUtxo } from './wallet'
+import type { AccountUtxo } from './wallet'
+import type { PlatformName } from './platforms'
 
 type Deposit = AccountUtxo & {
   timestamp: Date
