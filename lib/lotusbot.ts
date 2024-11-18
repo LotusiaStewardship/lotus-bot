@@ -25,8 +25,9 @@ export default class LotusBot {
     this.prisma = new Database()
     this.wallet = new WalletManager()
     this.handler = new Handler(this.prisma, this.wallet)
-    // Handler events
+    // @ts-ignore
     this.handler.on('Shutdown', this._shutdown)
+    // @ts-ignore
     this.handler.on('DepositSaved', this._depositSaved)
     /** Gather enabled platforms */
     for (const [platform, apiKey] of Object.entries(config.apiKeys)) {

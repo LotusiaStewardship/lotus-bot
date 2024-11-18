@@ -31,6 +31,7 @@ export class Handler extends EventEmitter {
   log = (module: string, message: string) =>
     console.log(`${module.toUpperCase()}: ${message}`)
   /* Called by any bot module that runs into unrecoverable error */
+  // @ts-ignore
   shutdown = () => this.emit('Shutdown')
   /** Make sure we process deposits we received while offline */
   init = async () => {
@@ -325,6 +326,7 @@ export class Handler extends EventEmitter {
         }
         const { accountId } = deposit.user
         const balance = await this.wallet.getAccountBalance(accountId)
+        // @ts-ignore
         return this.emit('DepositSaved', {
           platform: platformName as PlatformName,
           platformId: user.id,
