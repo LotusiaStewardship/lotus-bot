@@ -69,6 +69,7 @@ export class WalletManager extends EventEmitter {
     }>
   ) => {
     try {
+      await this.chronikWs.waitForOpen();
       for (const user of users) {
         await this.loadKey(user);
       }
