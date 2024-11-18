@@ -1,5 +1,5 @@
 // Utilities
-export const XPI_DIVISOR = 1000000;
+export const XPI_DIVISOR = 1000000
 
 // Default bot database properties
 export const BOT = {
@@ -24,7 +24,7 @@ export const BOT = {
       `I received your deposit of %s XPI. ` +
       `Your balance is now %s XPI.\r\n\r\n` +
       `[View tx on the Explorer](%s)`,
-    DEPOSIT_CONF: 
+    DEPOSIT_CONF:
       `Your deposit of %s XPI has been confirmed! ` +
       `Your balance is now %s XPI\r\n\r\n` +
       `[View tx on the Explorer](%s)`,
@@ -46,15 +46,15 @@ export const BOT = {
       `this wallet may not reflect your total account balance. If you send ` +
       `Lotus from this wallet, it WILL be reflected in your total account ` +
       `balance. If you send Lotus to this wallet, you will receive a deposit ` +
-      `notification.`
+      `notification.`,
   },
-};
+}
 
 // BIP44 Wallet parameters
 export const WALLET = {
   PURPOSE: 44,
   COINTYPE: 10605,
-};
+}
 
 // Default transaction parameters
 export const TRANSACTION = {
@@ -64,4 +64,4 @@ export const TRANSACTION = {
   DUST_LIMIT: 546,
   /** Minimum output amount for any Give/Withdraw */
   MIN_OUTPUT_AMOUNT: 1000,
-};
+}

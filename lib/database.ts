@@ -1,176 +1,210 @@
-import { PrismaClient } from "../prisma/prisma-client-js";
-import { AccountUtxo } from "./wallet";
+import { PrismaClient } from '../prisma/prisma-client-js'
+import { AccountUtxo } from './wallet'
 
 type Deposit = AccountUtxo & {
-  timestamp: Date,
+  timestamp: Date
   confirmed?: boolean
-};
+}
 
 type Give = {
-  txid: string,
-  platform: string,
-  timestamp: Date,
-  fromId: string,
-  toId: string,
+  txid: string
+  platform: string
+  timestamp: Date
+  fromId: string
+  toId: string
   value: string
-};
+}
 
 type Withdrawal = {
-  txid: string,
-  value: string,
-  timestamp: Date,
+  txid: string
+  value: string
+  timestamp: Date
   userId: string
-};
+}
+
+enum PlatformUserTable {
+  telegram = 'userTelegram',
+  discord = 'userDiscord',
+  twitter = 'userTwitter',
+}
+
+type Platform = 'telegram' | 'discord' | 'twitter'
 
 export class Database {
-  private prisma: PrismaClient;
+  private prisma: PrismaClient
 
   constructor() {
-    this.prisma = new PrismaClient();
-  };
-  connect = async () => await this.prisma.$connect();
-  disconnect = async () => await this.prisma.$disconnect();
+    this.prisma = new PrismaClient()
+  }
+  connect = async () => await this.prisma.$connect()
+  disconnect = async () => await this.prisma.$disconnect()
   /**
-   * Check if txid is a Give  
+   * Check if txid is a Give
    * Used when processing `AddedToMempool` to not save a Give as a Deposit
    */
-  isGiveTx = async (
-    txid: string
-  ) => {
+  isGiveTx = async (txid: string) => {
     try {
       const result = await this.prisma.give.findFirst({
         where: { txid },
-        select: { txid: true }
-      });
-      return result?.txid? true : false;
+        select: { txid: true },
+      })
+      return result?.txid ? true : false
     } catch (e: any) {
-      throw new Error(`isGiveTx: ${e.message}`);
+      throw new Error(`isGiveTx: ${e.message}`)
     }
-  };
-  isWithdrawTx = async (
-    txid: string
-  ) => {
+  }
+  isWithdrawTx = async (txid: string) => {
     try {
       const result = await this.prisma.withdrawal.findFirst({
         where: { txid },
-        select: { txid: true }
-      });
-      return result?.txid? true : false;
+        select: { txid: true },
+      })
+      return result?.txid ? true : false
     } catch (e: any) {
-      throw new Error(`isWithdrawTx: ${e.message}`);
+      throw new Error(`isWithdrawTx: ${e.message}`)
     }
   }
 
   /** Check db to ensure `userId` exists */
   isValidUser = async (
-    platform: string,
-    platformId: string
+    platform: Platform,
+    platformId: string,
   ): Promise<boolean> => {
-    const platformTable = this._toPlatformTable(platform);
     try {
-      const result = await this.prisma[platformTable].findFirst({
-        where: { id: platformId }
-      });
-      return result?.userId ? true : false;
+      //@ts-ignore
+      const result = await this.prisma[PlatformUserTable[platform]].findFirst({
+        where: { id: platformId },
+      })
+      return result?.userId ? true : false
     } catch (e: any) {
-      throw new Error(`isValidUser: ${e.message}`);
+      throw new Error(`isValidUser: ${e.message}`)
     }
-  };
+  }
   /** Get WalletKeys for all users of all platforms */
   getUserWalletKeys = async () => {
     try {
       const result = await this.prisma.user.findMany({
-        select: { id: true, accountId: true, key: {
-          select: { hdPrivKey: true }
-        }}
-      });
+        select: {
+          id: true,
+          accountId: true,
+          key: {
+            select: { hdPrivKey: true },
+          },
+        },
+      })
       return result.map(user => {
         return {
           accountId: user.accountId,
           userId: user.id,
-          hdPrivKey: user.key.hdPrivKey
+          hdPrivKey: user?.key?.hdPrivKey,
         }
-      });
+      })
     } catch (e: any) {
-      throw new Error(`getUserWalletKeys: ${e.message}`);
+      throw new Error(`getUserWalletKeys: ${e.message}`)
     }
-  };
+  }
+  updateUserWalletKey = async (
+    userId: string,
+    data: {
+      mnemonic: string
+      hdPrivKey: Buffer
+      hdPubKey: Buffer
+    },
+  ) => {
+    try {
+      return await this.prisma.walletKey.update({
+        where: { userId },
+        data,
+      })
+    } catch (e: any) {
+      throw new Error(`updateUserWAlletKey: ${e.message}`)
+    }
+  }
   /** Get Deposits for all users of all platforms */
   getDeposits = async () => {
     try {
-      return await this.prisma.deposit.findMany();
+      return await this.prisma.deposit.findMany()
     } catch (e: any) {
-      throw new Error(`getUserDeposits: ${e.message}`);
+      throw new Error(`getUserDeposits: ${e.message}`)
     }
-  };
+  }
   /** Get `userId` and `accountId` for the specified `platformId` */
-  getIds = async (
-    platform: string,
-    platformId: string
-  ) => {
-    const platformTable = this._toPlatformTable(platform);
+  getIds = async (platform: Platform, platformId: string) => {
     try {
-      const result = await this.prisma[platformTable].findFirst({
+      //@ts-ignore
+      const result = await this.prisma[PlatformUserTable[platform]].findFirst({
         where: { id: platformId },
-        select: { user: {
-          select: { id: true, accountId: true }
-        }}
-      });
+        select: {
+          user: {
+            select: { id: true, accountId: true },
+          },
+        },
+      })
       return {
         accountId: result.user.accountId,
         userId: result.user.id,
-      };
+      }
     } catch (e: any) {
-      throw new Error(`getIds: ${e.message}`);
+      throw new Error(`getIds: ${e.message}`)
     }
-  };
-  getAccountIdFromSecret = async (
-    secret: string
-  ) => {
+  }
+  getUserIdsForAccount = async (accountId: string): Promise<string[]> => {
+    try {
+      const result = await this.prisma.account.findFirst({
+        where: { id: accountId },
+        select: {
+          users: {
+            select: { id: true },
+          },
+        },
+      })
+      return result?.users?.map(user => user.id) || []
+    } catch (e: any) {
+      throw new Error('dafuq')
+    }
+  }
+  getAccountIdFromSecret = async (secret: string) => {
     try {
       const result = await this.prisma.user.findFirst({
         where: { secret },
-        select: { accountId: true }
-      });
-      return result?.accountId;
-    } catch (e: any) {
-
-    }
-  };
-  getUserSecret = async (
-    platform: string,
-    platformId: string
-  ) => {
-    const platformTable = this._toPlatformTable(platform);
+        select: { accountId: true },
+      })
+      return result?.accountId
+    } catch (e: any) {}
+  }
+  getUserSecret = async (platform: Platform, platformId: string) => {
     try {
-      const result = await this.prisma[platformTable].findFirst({
+      //@ts-ignore
+      const result = await this.prisma[PlatformUserTable[platform]].findFirst({
         where: { id: platformId },
-        select: { user: {
-          select: { secret: true }
-        }}
-      });
-      return result.user.secret;
+        select: {
+          user: {
+            select: { secret: true },
+          },
+        },
+      })
+      return result.user.secret
     } catch (e: any) {
-      throw new Error(`getUserSecret: ${e.message}`);
+      throw new Error(`getUserSecret: ${e.message}`)
     }
-  };
-  getUserMnemonic = async (
-    userId: string
-  ) => {
+  }
+  getUserMnemonic = async (userId: string) => {
     try {
       const result = await this.prisma.user.findFirst({
         where: { id: userId },
-        select: { key: { 
-          select: { mnemonic: true }
-        }}
-      });
-      return result.key.mnemonic
+        select: {
+          key: {
+            select: { mnemonic: true },
+          },
+        },
+      })
+      return result?.key?.mnemonic
     } catch (e: any) {
-      throw new Error(`getUserMnemonic: ${e.message}`);
+      throw new Error(`getUserMnemonic: ${e.message}`)
     }
-  };
+  }
   /**
-   * Save new `Account` to the database  
+   * Save new `Account` to the database
    * Also saves all associated data (e.g. Platform, WalletKey, etc.)
    */
   saveAccount = async ({
@@ -181,143 +215,121 @@ export class Database {
     platformId,
     mnemonic,
     hdPrivKey,
-    hdPubKey
+    hdPubKey,
   }: {
-    accountId: string,
-    userId: string,
-    secret: string,
-    platform?: string,
-    platformId?: string,
-    mnemonic: string,
-    hdPrivKey: string,
+    accountId: string
+    userId: string
+    secret: string
+    platform?: string
+    platformId?: string
+    mnemonic: string
+    hdPrivKey: string
     hdPubKey: string
   }) => {
     try {
-      const privKeyBytes = Buffer.from(hdPrivKey);
-      const pubKeyBytes = Buffer.from(hdPubKey);
+      const privKeyBytes = Buffer.from(hdPrivKey)
+      const pubKeyBytes = Buffer.from(hdPubKey)
       const account = {
         id: accountId,
-        users: { create: {
-          id: userId,
-          secret,
-          key: {
-            create: {
-              mnemonic,
-              hdPrivKey: privKeyBytes,
-              hdPubKey: pubKeyBytes
-            }
+        users: {
+          create: {
+            id: userId,
+            secret,
+            key: {
+              create: {
+                mnemonic,
+                hdPrivKey: privKeyBytes,
+                hdPubKey: pubKeyBytes,
+              },
+            },
           },
-        }}
-      };
-      if (platform && platformId) {
-        account.users.create[platform.toLowerCase()] = { create: {
-          id: platformId
-        }};
+        },
       }
-      return await this.prisma.account.create({ data: account });
+      if (platform && platformId) {
+        account.users.create[platform.toLowerCase()] = {
+          create: {
+            id: platformId,
+          },
+        }
+      }
+      return await this.prisma.account.create({ data: account })
     } catch (e: any) {
-      throw new Error(`saveAccount: ${e.message}`);
+      throw new Error(`saveAccount: ${e.message}`)
     }
-  };
+  }
   /** For linking one user with another user by `accountId` */
-  updateUserAccountId = async (
-    userId: string,
-    accountId: string
-  ) =>{
+  updateUserAccountId = async (userId: string, accountId: string) => {
     try {
       return await this.prisma.user.update({
         where: { id: userId },
         data: { accountId },
-      });
+      })
     } catch (e: any) {
-      throw new Error(`updateUserAccountId: ${e.message}`);
+      throw new Error(`updateUserAccountId: ${e.message}`)
     }
-  };
+  }
   /**
-   * Save the deposit received as UTXO from Chronik API  
+   * Save the deposit received as UTXO from Chronik API
    * Return the `platformId`s to notify the user
    */
-  saveDeposit = async (
-    data: Deposit
-  ) => {
+  saveDeposit = async (data: Deposit) => {
     try {
       const result = await this.prisma.deposit.create({
         data,
-        select: { user: {
-          select: {
-            accountId: true,
-            telegram: true,
-            twitter: true,
-            discord: true
-          }
-        }}
-      });
-      return result;
+        select: {
+          user: {
+            select: {
+              accountId: true,
+              telegram: true,
+              twitter: true,
+              discord: true,
+            },
+          },
+        },
+      })
+      return result
     } catch (e: any) {
-      throw new Error(`saveDeposit: ${e.message}`);
+      throw new Error(`saveDeposit: ${e.message}`)
     }
-  };
-  deleteGive = async (
-    txid: string
-  ) => {
+  }
+  deleteGive = async (txid: string) => {
     try {
       await this.prisma.give.delete({
-        where: { txid }
-      });
+        where: { txid },
+      })
     } catch (e: any) {
-      throw new Error(`deleteGive: ${e.message}`);
+      throw new Error(`deleteGive: ${e.message}`)
     }
-  };
-  deleteWithdrawal = async (
-    txid: string
-  ) => {
+  }
+  deleteWithdrawal = async (txid: string) => {
     try {
       await this.prisma.withdrawal.delete({
-        where: { txid }
-      });
+        where: { txid },
+      })
     } catch (e: any) {
-      throw new Error(`deleteWithdrawal: ${e.message}`);
+      throw new Error(`deleteWithdrawal: ${e.message}`)
     }
-  };
-  saveGive = async (
-    data: Give
-  ) => {
+  }
+  saveGive = async (data: Give) => {
     try {
-      await this.prisma.give.create({ data });
+      await this.prisma.give.create({ data })
     } catch (e: any) {
-      throw new Error(`saveGive: ${e.message}`);
+      throw new Error(`saveGive: ${e.message}`)
     }
-  };
-  saveWithdrawal = async (
-    data: Withdrawal
-  ) => {
+  }
+  saveWithdrawal = async (data: Withdrawal) => {
     try {
-      await this.prisma.withdrawal.create({ data });
+      await this.prisma.withdrawal.create({ data })
     } catch (e: any) {
-      throw new Error(`saveWithdrawal: ${e.message}`);
+      throw new Error(`saveWithdrawal: ${e.message}`)
     }
-  };
+  }
 
-  private _execTransaction = async (
-    inserts: any[]
-  ) => {
+  private _execTransaction = async (inserts: any[]) => {
     try {
-      return await this.prisma.$transaction(inserts);
+      return await this.prisma.$transaction(inserts)
     } catch (e: any) {
-      throw new Error(`_execTransaction: ${e.message}`);
+      throw new Error(`_execTransaction: ${e.message}`)
     }
-  };
-
-  private _toPlatformTable = (
-    platform: string
-  ) => {
-    switch (platform) {
-      case 'telegram':
-        return `userTelegram`;
-      case 'twitter':
-        return 'userTwitter';
-      case 'discord':
-        return 'userDiscord';
-    }
-  };
-};
+  }
+}

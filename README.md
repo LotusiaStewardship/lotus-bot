@@ -3,7 +3,8 @@
 Bot for Multiple Social Networking Platforms for Giving/Receiving Lotus to/from other Users.
 
 ## Current Build Tests
-*Continuous Testing & Integration not implemented yet*
+
+_Continuous Testing & Integration not implemented yet_
 
 ## Requirements
 
@@ -20,13 +21,14 @@ To run the automated install, paste and execute the following command in your te
 
 After the installation completes, you will need to edit your `/opt/lotus-bot/.env` file to fill in the appropriate values for your platform!
 
-The `install.sh` script will:  
-  - Clone this repository to `/opt/lotus-bot` directory
-  - Create a new system user with the repository as its `$HOME` folder and ensure proper permissions
-  - Create the `.env` config file
-  - Install NPM dependencies
-  - Set up Prisma and sqlite3 database
-  - Install systemd service
+The `install.sh` script will:
+
+- Clone this repository to `/opt/lotus-bot` directory
+- Create a new system user with the repository as its `$HOME` folder and ensure proper permissions
+- Create the `.env` config file
+- Install NPM dependencies
+- Set up Prisma and sqlite3 database
+- Install systemd service
 
 ## Manual Install
 
@@ -42,11 +44,14 @@ If you prefer to not run the Automatic Install, or if you are running Windows, f
 6. Modify `.env` with the required API key(s) for the bot(s) you want to run.
 7. Install dependencies: `npm install`
 8. Initialize the Database:
+
 ```
 npx prisma migrate dev --name init
 sqlite3 ./prisma/dev.db 'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;'
 ```
+
 9. systemd is supported, you can install the service unit from the `install/` folder:
+
 ```
 sudo cp ./install/lotus-bot.service /etc/systemd/system
 sudo systemctl daemon-reload
@@ -62,6 +67,7 @@ sudo systemctl daemon-reload
 6. Modify `.env` with the required API key(s) for the bot(s) you want to run.
 7. Install dependencies: `npm install`
 8. Initialize the Database:
+
 ```
 npx prisma migrate dev --name init
 sqlite3 ./prisma/dev.db 'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;'
@@ -87,7 +93,7 @@ give    .......... Give Lotus to another user
 
 ### On-Chain Giving
 
-Starting with v2.1.0, the "give" interaction of lotus-bot is now done on-chain. The Give database table is now simply used for tracking gives rather than for calculating user balances. User balances are now calculated solely by the UTXOs of the user's `WalletKey`. 
+Starting with v2.1.0, the "give" interaction of lotus-bot is now done on-chain. The Give database table is now simply used for tracking gives rather than for calculating user balances. User balances are now calculated solely by the UTXOs of the user's `WalletKey`.
 
 ### Write-Ahead Logging on sqlite3
 
