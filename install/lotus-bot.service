@@ -5,11 +5,11 @@ After=network.target
 [Service]
 Type=exec
 ExitType=cgroup
-User=lotus-bot
+User=lotusbot
 Group=%G
-PIDFile=/opt/lotus-bot/tmp/lotus-bot.pid
-WorkingDirectory=/opt/lotus-bot/
-ExecStartPre=/opt/lotus-bot/node_modules/typescript/bin/tsc
+PIDFile=/opt/lotusbot/tmp/lotus-bot.pid
+WorkingDirectory=/opt/lotusbot/
+ExecStartPre=/opt/lotusbot/node_modules/typescript/bin/tsc
 ExecStart=node index.js
 ExecStop=/usr/bin/kill -SIGINT $MAINPID
 Restart=on-failure
