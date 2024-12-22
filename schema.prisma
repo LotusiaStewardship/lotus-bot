@@ -93,6 +93,26 @@ model WalletKey {
 }
 
 model ExtensionInstance {
-  extensionId String @unique
-  pseudorank Int
+  id String @id
+  createdTime DateTime
+  // indexed statistics
+  ranksDay Int @default(0) // resets to 0 at 12AM UTC
+  ranksWeek Int @default(0) // resets to 0 at 12AM UTC
+  ranksMonth Int @default(0) // resets to 0 at 12AM UTC
+  ranksAllTime Int @default(0) // resets to 0 at 12AM UTC
+  // relations
+  wallet ExtensionWallet[] // many wallets can be associated with an instance
+}
+
+model ExtensionWallet {
+  id String @id // primary Lotus wallet address
+  instanceId String @unique
+  hdPubKey String @unique
+  // BIP44 parameters
+  // ref: https://en.bitcoin.it/wiki/BIP_0044#Path_levels
+  bip44Account Int @default(0) // BIP44 account
+  bip44Change Int @default(0) // this won't ever be a value other than 0
+  bip44Index Int @default(0)
+  // relations
+  instance ExtensionInstance @relation(fields: [instanceId], references: [id])
 }
