@@ -75,10 +75,11 @@ export default class LotusBot {
         await this.wallet.init(
           keys.map(key => {
             const { accountId, userId, hdPrivKey } = key
+            const hdPrivKeyBuf = Buffer.from(hdPrivKey)
             return {
               accountId,
               userId,
-              hdPrivKey: WalletManager.hdPrivKeyFromBuffer(hdPrivKey),
+              hdPrivKey: WalletManager.hdPrivKeyFromBuffer(hdPrivKeyBuf),
             }
           }),
         )
