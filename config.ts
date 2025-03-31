@@ -1,4 +1,4 @@
-import dotenv from 'dotenv'
+import { config as dotenv } from 'dotenv'
 
 type ParsedConfig = {
   apiKeys: {
@@ -22,7 +22,7 @@ type ParsedConfig = {
 
 class Config {
   constructor() {
-    dotenv.config()
+    dotenv()
   }
 
   get parsedConfig() {

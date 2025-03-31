@@ -1,9 +1,11 @@
 migrations/
 node_modules/
 prisma/
+.output
+**/*.js
 .env
-test.ts
-lib/*.js
-lib/platforms/*.js
-util/*.js
-/*.js
+**/test.*
+#lib/*.js
+#lib/platforms/*.js
+#util/*.js
+#/*.js

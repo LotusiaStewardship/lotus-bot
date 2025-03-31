@@ -2,29 +2,29 @@
   "name": "lotus-bot",
   "version": "2.4.0",
   "description": "Chat bot for social media to use for giving Lotus XPI to other people",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prestart": "npx tsc",
-    "start": "node index.js"
+    "build:dev": "rm -rf .output && npx tsc",
+    "build:prod": "npm run 'build:dev' && npm ci --omit=dev",
+    "start": "node .output/index.js"
   },
-  "author": "maff1989",
+  "author": "Lotusia Stewardship",
   "dependencies": {
     "@abcpros/bitcore-lib-xpi": "8.25.34",
     "@abcpros/bitcore-mnemonic": "8.25.43",
-    "@prisma/client": "5.22.0",
-    "@types/express": "^4.17.21",
-    "@types/node": "22.9.0",
+    "@prisma/client": "6.5.0",
     "chronik-client": "0.19.0",
-    "discord.js": "14.16.3",
-    "dotenv": "16.4.4",
-    "express": "4.21.1",
-    "telegraf": "4.15.3",
-    "twitter-api-v2": "1.14.1",
-    "typescript": "5.6.3"
+    "discord.js": "14.18.0",
+    "dotenv": "16.4.7",
+    "telegraf": "4.16.3",
+    "twitter-api-v2": "1.22.0"
   },
   "devDependencies": {
-    "prettier": "3.3.3",
-    "prisma": "5.22.0",
-    "typescript-eslint": "8.14.0"
+    "@types/node": "22.13.14",
+    "prettier": "3.5.3",
+    "prisma": "6.5.0",
+    "typescript": "5.8.2",
+    "typescript-eslint": "^8.28.0"
   }
 }
