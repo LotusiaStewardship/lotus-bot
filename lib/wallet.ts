@@ -16,7 +16,7 @@ import {
 } from 'chronik-client'
 import config from '../config'
 import { WALLET } from '../util/constants'
-import EventEmitter from 'node:events'
+import { EventEmitter } from 'node:events'
 
 type WalletKey = {
   signingKey: PrivateKey
@@ -405,9 +405,9 @@ export class WalletManager extends EventEmitter {
     }
   }
   /** Generates a new 12-word mnemonic phrase */
-  static newMnemonic = () => new Mnemonic() as Mnemonic
+  static newMnemonic = () => new Mnemonic() as typeof Mnemonic
   /** Gets `HDPrivateKey` from mnemonic seed buffer */
-  static newHDPrivateKey = (mnemonic: Mnemonic) =>
+  static newHDPrivateKey = (mnemonic: typeof Mnemonic) =>
     HDPrivateKey.fromSeed(mnemonic.toSeed())
   /** Instantiate Prisma HDPrivateKey buffer as `HDPrivateKey` */
   static hdPrivKeyFromBuffer = (hdPrivKeyBuf: Buffer) =>
