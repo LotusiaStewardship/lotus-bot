@@ -5,7 +5,7 @@ import { Platform } from '.'
 import { BOT } from '../../util/constants'
 import { split } from '../../util'
 import config from '../../config'
-import { Message } from 'telegraf/typings/core/types/typegram'
+import { Message } from 'telegraf/types'
 import { Handler } from '../handler'
 
 const REPLIES_PER_SECOND = 20
@@ -64,7 +64,9 @@ export class Telegram implements Platform {
     try {
       await this.bot.telegram.sendMessage(platformOrChatId, msg, {
         parse_mode: 'Markdown',
-        reply_to_message_id: replyToMessageId,
+        reply_parameters: {
+          message_id: replyToMessageId,
+        },
       })
     } catch (e: any) {
       this.handler.log(
@@ -262,7 +264,9 @@ export class Telegram implements Platform {
     try {
       if (ctx.chat.type !== 'private') {
         return await ctx.sendMessage(BOT.MESSAGE.ERR_DM_COMMAND, {
-          reply_to_message_id: ctx.message.message_id,
+          reply_parameters: {
+            message_id: ctx.message.message_id,
+          },
         })
       }
       const platformId = ctx.message.from.id.toString()
@@ -312,7 +316,9 @@ export class Telegram implements Platform {
       const replyToMessageId = ctx.message.message_id
       if (ctx.message.chat.type == 'private') {
         return await ctx.sendMessage(BOT.MESSAGE.ERR_NOT_DM_COMMAND, {
-          reply_to_message_id: replyToMessageId,
+          reply_parameters: {
+            message_id: replyToMessageId,
+          },
         })
       }
       const chatId = ctx.message.chat.id
@@ -330,12 +336,18 @@ export class Telegram implements Platform {
           if (!toId || fromId == toId) {
             return await ctx.sendMessage(
               BOT.MESSAGE.ERR_GIVE_MUST_REPLY_TO_USER,
-              { reply_to_message_id: replyToMessageId },
+              {
+                reply_parameters: {
+                  message_id: replyToMessageId,
+                },
+              },
             )
           }
           if (toId == ctx.botInfo.id) {
             return await ctx.sendMessage(BOT.MESSAGE.ERR_GIVE_TO_BOT, {
-              reply_to_message_id: replyToMessageId,
+              reply_parameters: {
+                message_id: replyToMessageId,
+              },
             })
           }
           const messageText = <string>(<any>ctx.message).text
@@ -343,7 +355,9 @@ export class Telegram implements Platform {
           const amountInt = Number(amount)
           if (isNaN(amountInt) || amountInt <= 0) {
             return await ctx.sendMessage(BOT.MESSAGE.ERR_AMOUNT_INVALID, {
-              reply_to_message_id: replyToMessageId,
+              reply_parameters: {
+                message_id: replyToMessageId,
+              },
             })
           }
           return this.handleGiveCommand(
