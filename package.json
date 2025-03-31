@@ -4,8 +4,9 @@
   "description": "Chat bot for social media to use for giving Lotus XPI to other people",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prestart": "npx tsc",
-    "start": "node index.js"
+    "build:dev": "rm -rf .output && npx tsc",
+    "build:prod": "npm run 'build:dev' && npm ci --omit=dev",
+    "start": "node .output/index.js"
   },
   "author": "maff1989",
   "dependencies": {
