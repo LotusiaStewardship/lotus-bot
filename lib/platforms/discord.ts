@@ -164,9 +164,9 @@ export class Discord implements Platform {
    */
   sendMessage = async (guildChannel: string, message: string) => {
     const [, channelId] = guildChannel.split(':')
-    const channel = this.client.channels.cache.get(channelId) as TextChannel
-    if (channel instanceof TextChannel && channel.name == 'general') {
-      channel.send(message)
+    const channel = this.client.channels.cache.get(channelId)
+    if (channel instanceof TextChannel) {
+      return await channel.send(message)
     }
   }
   private handleBalanceCommand = async (
