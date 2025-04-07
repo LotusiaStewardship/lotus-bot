@@ -4,7 +4,7 @@ import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
 import { NativeConnection, Worker } from '@temporalio/worker'
-import { WorkerActivities } from './temporal'
+import { LotusBotActivities } from './temporal'
 
 type SendMessageInput = {
   platform: PlatformName
@@ -123,8 +123,8 @@ export default class LotusBot {
           v => v === undefined || v === '',
         )
       ) {
-        const activities: WorkerActivities = {
-          sendMessage: this.temporal.sendMessage,
+        const activities: LotusBotActivities = {
+          ...this.temporal,
         }
         this.worker = await Worker.create({
           connection: await NativeConnection.connect({
