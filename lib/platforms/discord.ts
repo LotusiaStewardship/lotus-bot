@@ -10,7 +10,7 @@ import {
   ActivityType,
   Message,
   ChannelType,
-  GuildChannel,
+  TextChannel,
 } from 'discord.js'
 import { BOT } from '../../util/constants'
 import { format } from 'node:util'
@@ -157,9 +157,15 @@ export class Discord implements Platform {
     this.client?.destroy()
   }
   getBotId = () => this.clientId
-  sendMessage = async (guildId: string, message: string) => {
-    const channel = this.client.channels.cache.get(guildId) as GuildChannel
-    if (channel?.isTextBased()) {
+  /**
+   *
+   * @param guildChannel e.g. `<guildId>:<channelId>`
+   * @param message
+   */
+  sendMessage = async (guildChannel: string, message: string) => {
+    const [, channelId] = guildChannel.split(':')
+    const channel = this.client.channels.cache.get(channelId) as TextChannel
+    if (channel instanceof TextChannel && channel.name == 'general') {
       channel.send(message)
     }
   }
