@@ -122,7 +122,9 @@ export default class LotusBot {
         sendMessage: this.temporal.sendMessage,
       }
       this.worker = await Worker.create({
-        connection: await NativeConnection.connect(),
+        connection: await NativeConnection.connect({
+          address: config.temporalWorker.host,
+        }),
         namespace: config.temporalWorker.namespace,
         taskQueue: config.temporalWorker.taskQueue,
         activities,
