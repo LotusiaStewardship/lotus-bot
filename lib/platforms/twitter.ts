@@ -7,6 +7,7 @@ export class Twitter implements Platform {
   launch = async () => {}
   stop = async () => {}
   getBotId: () => string
+  sendMessage: (chatOrGuildId: string, message: string) => Promise<unknown>
   sendBalanceReply: (platformId: string, balance: string) => Promise<void>
   sendDepositReply: (platformId: string, address: string) => Promise<void>
   sendDepositReceived: (

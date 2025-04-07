@@ -75,7 +75,9 @@ export class Telegram implements Platform {
       )
     }
   }
-
+  sendMessage = async (chatId: string, message: string) => {
+    return await this.notifyUser(chatId, message)
+  }
   sendDepositReceived = async (
     platformId: string,
     txid: string,

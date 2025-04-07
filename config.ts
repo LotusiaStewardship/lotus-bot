@@ -18,6 +18,10 @@ type ParsedConfig = {
     }
   }
   dbUrl: string
+  temporalWorker: {
+    namespace: string
+    taskQueue: string
+  }
 }
 
 export class Config {
@@ -48,6 +52,10 @@ export class Config {
         },
       },
       dbUrl: process.env.DATABASE_URL,
+      temporalWorker: {
+        namespace: process.env.TEMPORAL_NAMESPACE,
+        taskQueue: process.env.TEMPORAL_TASKQUEUE,
+      },
     }
   }
 }
