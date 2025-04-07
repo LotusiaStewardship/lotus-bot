@@ -191,7 +191,7 @@ export default class LotusBot {
     }
   }
   /**
-   * Temporal activities
+   * Temporal activities (must be arrow functions)
    */
   temporal = {
     /**
@@ -199,11 +199,7 @@ export default class LotusBot {
      * @param param0
      * @returns
      */
-    sendMessage: async function ({
-      platform,
-      chatId,
-      message,
-    }: SendMessageInput) {
+    sendMessage: async ({ platform, chatId, message }: SendMessageInput) => {
       await this.bots[platform].sendMessage(chatId, message)
     },
   }
