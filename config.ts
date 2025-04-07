@@ -1,6 +1,6 @@
 import { config as dotenv } from 'dotenv'
 
-type ParsedConfig = {
+export type ParsedConfig = {
   apiKeys: {
     telegram: string
     twitter: string
