@@ -12,6 +12,11 @@ type SendMessageInput = {
   message: string
 }
 
+type SendLotusInput = {
+  scriptPayload: string
+  sats: string
+}
+
 // Constants used for logging purposes
 const WALLET = 'walletmanager'
 const DB = 'prisma'
@@ -201,6 +206,10 @@ export default class LotusBot {
      */
     sendMessage: async ({ platform, chatId, message }: SendMessageInput) => {
       await this.bots[platform].sendMessage(chatId, message)
+    },
+
+    sendLotus: async ({ scriptPayload, sats }: SendLotusInput) => {
+      // TODO: implement this
     },
   }
 }
