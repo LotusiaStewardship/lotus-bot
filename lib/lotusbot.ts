@@ -3,11 +3,26 @@ import config from '../config'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
+import { NativeConnection, Worker } from '@temporalio/worker'
+import { LotusBotActivities } from './temporal'
+
+type SendMessageInput = {
+  platform: PlatformName
+  chatId: string
+  message: string
+}
+
+type SendLotusInput = {
+  scriptPayload: string
+  sats: string
+}
 
 // Constants used for logging purposes
 const WALLET = 'walletmanager'
 const DB = 'prisma'
 const MAIN = 'lotusbot'
+/** */
+export type PlatformInstances = { [platform in PlatformName]?: Platform }
 /**
  * Master class
  * Processes all platform commands
@@ -17,7 +32,8 @@ export default class LotusBot {
   private prisma: Database
   private wallet: WalletManager
   private handler: Handler
-  private bots: { [platform in PlatformName]?: Platform } = {}
+  private bots: PlatformInstances = {}
+  private worker!: Worker
   /** Hold enabled platforms */
   private platforms: [name: PlatformName, apiKey: string][] = []
 
@@ -104,6 +120,28 @@ export default class LotusBot {
        * Initialize primary command handler module
        */
       await this.handler.init()
+      /**
+       * Initialize Temporal worker if all required parameters are configured
+       */
+      if (
+        !Object.values(config.temporalWorker).some(
+          v => v === undefined || v === '',
+        )
+      ) {
+        const activities: LotusBotActivities = {
+          ...this.temporal,
+        }
+        this.worker = await Worker.create({
+          connection: await NativeConnection.connect({
+            address: config.temporalWorker.host,
+          }),
+          namespace: config.temporalWorker.namespace,
+          taskQueue: config.temporalWorker.taskQueue,
+          activities,
+          workflowsPath: require.resolve('./temporal/workflows'),
+        })
+        this.worker.run()
+      }
     } catch (e: any) {
       this._log(MAIN, `FATAL: init: ${e.message}`)
       await this._shutdown()
@@ -120,6 +158,11 @@ export default class LotusBot {
     }
     this.wallet?.closeWsEndpoint()
     await this.prisma?.disconnect()
+    try {
+      this.worker?.shutdown()
+    } catch (e) {
+      //
+    }
     process.exit(1)
   }
 
@@ -151,5 +194,22 @@ export default class LotusBot {
     } catch (e: any) {
       this._logPlatformNotifyError(platform, '_depositSaved', e.message)
     }
+  }
+  /**
+   * Temporal activities (must be arrow functions)
+   */
+  temporal = {
+    /**
+     *
+     * @param param0
+     * @returns
+     */
+    sendMessage: async ({ platform, chatId, message }: SendMessageInput) => {
+      await this.bots[platform].sendMessage(chatId, message)
+    },
+
+    sendLotus: async ({ scriptPayload, sats }: SendLotusInput) => {
+      // TODO: implement this
+    },
   }
 }

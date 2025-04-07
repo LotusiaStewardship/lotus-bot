@@ -10,6 +10,7 @@ import {
   ActivityType,
   Message,
   ChannelType,
+  TextChannel,
 } from 'discord.js'
 import { BOT } from '../../util/constants'
 import { format } from 'node:util'
@@ -156,7 +157,18 @@ export class Discord implements Platform {
     this.client?.destroy()
   }
   getBotId = () => this.clientId
-
+  /**
+   *
+   * @param guildChannel e.g. `<guildId>:<channelId>`
+   * @param message
+   */
+  sendMessage = async (guildChannel: string, message: string) => {
+    const [, channelId] = guildChannel.split(':')
+    const channel = this.client.channels.cache.get(channelId)
+    if (channel instanceof TextChannel) {
+      return await channel.send(message)
+    }
+  }
   private handleBalanceCommand = async (
     interaction: ChatInputCommandInteraction | Message,
     platformId: string,

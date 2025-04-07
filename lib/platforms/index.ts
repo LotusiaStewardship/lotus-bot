@@ -20,6 +20,11 @@ export interface Platform {
   /** Deactivate the bot */
   stop: () => Promise<void>
   /**
+   *
+   * @returns
+   */
+  sendMessage: (chatId: string, message: string) => Promise<unknown>
+  /**
    * Send notification to `platformId` when new deposit received in Chronik API
    */
   sendDepositReceived: (

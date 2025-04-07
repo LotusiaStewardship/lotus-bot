@@ -1,6 +1,6 @@
 import { config as dotenv } from 'dotenv'
 
-type ParsedConfig = {
+export type ParsedConfig = {
   apiKeys: {
     telegram: string
     twitter: string
@@ -18,6 +18,11 @@ type ParsedConfig = {
     }
   }
   dbUrl: string
+  temporalWorker: {
+    host: string
+    namespace: string
+    taskQueue: string
+  }
 }
 
 export class Config {
@@ -48,6 +53,11 @@ export class Config {
         },
       },
       dbUrl: process.env.DATABASE_URL,
+      temporalWorker: {
+        host: process.env.TEMPORAL_HOST,
+        namespace: process.env.TEMPORAL_NAMESPACE,
+        taskQueue: process.env.TEMPORAL_TASKQUEUE,
+      },
     }
   }
 }
