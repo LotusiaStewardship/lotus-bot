@@ -67,6 +67,9 @@ export class Telegram implements Platform {
         reply_parameters: {
           message_id: replyToMessageId,
         },
+        link_preview_options: {
+          is_disabled: true,
+        },
       })
     } catch (e: any) {
       this.handler.log(
