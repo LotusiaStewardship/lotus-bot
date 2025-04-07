@@ -116,21 +116,27 @@ export default class LotusBot {
        */
       await this.handler.init()
       /**
-       * Initialize Temporal worker
+       * Initialize Temporal worker if all required parameters are configured
        */
-      const activities: WorkerActivities = {
-        sendMessage: this.temporal.sendMessage,
+      if (
+        !Object.values(config.temporalWorker).some(
+          v => v === undefined || v === '',
+        )
+      ) {
+        const activities: WorkerActivities = {
+          sendMessage: this.temporal.sendMessage,
+        }
+        this.worker = await Worker.create({
+          connection: await NativeConnection.connect({
+            address: config.temporalWorker.host,
+          }),
+          namespace: config.temporalWorker.namespace,
+          taskQueue: config.temporalWorker.taskQueue,
+          activities,
+          workflowsPath: require.resolve('./temporal/workflows'),
+        })
+        this.worker.run()
       }
-      this.worker = await Worker.create({
-        connection: await NativeConnection.connect({
-          address: config.temporalWorker.host,
-        }),
-        namespace: config.temporalWorker.namespace,
-        taskQueue: config.temporalWorker.taskQueue,
-        activities,
-        workflowsPath: require.resolve('./temporal/workflows'),
-      })
-      this.worker.run()
     } catch (e: any) {
       this._log(MAIN, `FATAL: init: ${e.message}`)
       await this._shutdown()
