@@ -20,9 +20,9 @@ type ParsedConfig = {
   dbUrl: string
 }
 
-class Config {
-  constructor() {
-    dotenv()
+export class Config {
+  constructor(path?: string) {
+    dotenv({ path })
   }
 
   get parsedConfig() {
@@ -52,5 +52,5 @@ class Config {
   }
 }
 
-const config = new Config()
+const config = new Config('./.env')
 export default config.parsedConfig
