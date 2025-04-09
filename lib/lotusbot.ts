@@ -57,6 +57,8 @@ export default class LotusBot {
   /** Informational and error logging */
   private _log = (module: string, message: string) =>
     console.log(`${module.toUpperCase()}: ${message}`)
+  private _warn = (module: string, message: string) =>
+    console.warn(`${module.toUpperCase()}: ${message}`)
   /** Platform notification error logging */
   private _logPlatformNotifyError = (
     platform: PlatformName,
@@ -145,7 +147,7 @@ export default class LotusBot {
           })
           this.worker.run()
         } catch (e) {
-          console.warn(`${MAIN}: Temporal: Worker.create(): ${e.message}`)
+          this._warn(MAIN, `Temporal: Worker.create(): ${e.mmessage}`)
         }
       }
     } catch (e: any) {
