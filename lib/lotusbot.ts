@@ -147,7 +147,7 @@ export default class LotusBot {
           })
           this.worker.run()
         } catch (e) {
-          this._warn(MAIN, `Temporal: Worker.create(): ${e.mmessage}`)
+          this._warn(MAIN, `Temporal: Worker.create(): ${e.message}`)
         }
       }
     } catch (e: any) {
