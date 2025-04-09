@@ -57,6 +57,8 @@ export default class LotusBot {
   /** Informational and error logging */
   private _log = (module: string, message: string) =>
     console.log(`${module.toUpperCase()}: ${message}`)
+  private _warn = (module: string, message: string) =>
+    console.warn(`${module.toUpperCase()}: ${message}`)
   /** Platform notification error logging */
   private _logPlatformNotifyError = (
     platform: PlatformName,
@@ -128,19 +130,25 @@ export default class LotusBot {
           v => v === undefined || v === '',
         )
       ) {
-        const activities: LotusBotActivities = {
-          ...this.temporal,
+        try {
+          const activities: LotusBotActivities = {
+            ...this.temporal,
+          }
+          this.worker = await Worker.create({
+            connection: await NativeConnection.connect({
+              address: config.temporalWorker.host,
+            }),
+            namespace: config.temporalWorker.namespace,
+            taskQueue: config.temporalWorker.taskQueue,
+            activities,
+            workflowBundle: {
+              codePath: require.resolve('./temporal/workflows'),
+            },
+          })
+          this.worker.run()
+        } catch (e) {
+          this._warn(MAIN, `Temporal: Worker.create(): ${e.message}`)
         }
-        this.worker = await Worker.create({
-          connection: await NativeConnection.connect({
-            address: config.temporalWorker.host,
-          }),
-          namespace: config.temporalWorker.namespace,
-          taskQueue: config.temporalWorker.taskQueue,
-          activities,
-          workflowsPath: require.resolve('./temporal/workflows'),
-        })
-        this.worker.run()
       }
     } catch (e: any) {
       this._log(MAIN, `FATAL: init: ${e.message}`)
