@@ -138,7 +138,9 @@ export default class LotusBot {
           namespace: config.temporalWorker.namespace,
           taskQueue: config.temporalWorker.taskQueue,
           activities,
-          workflowsPath: require.resolve('./temporal/workflows'),
+          workflowBundle: {
+            codePath: require.resolve('./temporal/workflows'),
+          },
         })
         this.worker.run()
       }
