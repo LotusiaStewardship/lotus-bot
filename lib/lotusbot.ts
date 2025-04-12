@@ -3,8 +3,9 @@ import config from '../config'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
+import { Client, type SearchAttributes } from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'
-import { LotusBotActivities } from './temporal'
+import { Activities, LocalActivities } from './temporal'
 
 type SendMessageInput = {
   platform: PlatformName
@@ -34,6 +35,7 @@ export default class LotusBot {
   private handler: Handler
   private bots: PlatformInstances = {}
   private worker!: Worker
+  private temporalClient!: Client
   /** Hold enabled platforms */
   private platforms: [name: PlatformName, apiKey: string][] = []
 
@@ -131,9 +133,16 @@ export default class LotusBot {
         )
       ) {
         try {
-          const activities: LotusBotActivities = {
-            ...this.temporal,
+          // set activities object
+          const activities: Activities & LocalActivities = {
+            ...this.temporalActivities,
+            ...this.temporalLocalActivities,
           }
+          // create client connection
+          this.temporalClient = new Client({
+            namespace: config.temporalWorker.namespace,
+          })
+          // create worker
           this.worker = await Worker.create({
             connection: await NativeConnection.connect({
               address: config.temporalWorker.host,
@@ -147,7 +156,7 @@ export default class LotusBot {
           })
           this.worker.run()
         } catch (e) {
-          this._warn(MAIN, `Temporal: Worker.create(): ${e.message}`)
+          this._warn(MAIN, `Temporal: init: ${e.message}`)
         }
       }
     } catch (e: any) {
@@ -206,7 +215,7 @@ export default class LotusBot {
   /**
    * Temporal activities (must be arrow functions)
    */
-  temporal = {
+  temporalActivities = {
     /**
      *
      * @param param0
@@ -218,6 +227,45 @@ export default class LotusBot {
 
     sendLotus: async ({ scriptPayload, sats }: SendLotusInput) => {
       // TODO: implement this
+    },
+    startWorkflow: async ({
+      taskQueue,
+      workflowType,
+      workflowId,
+      searchAttributes,
+      args,
+    }: {
+      taskQueue: string
+      workflowType: string
+      workflowId: string
+      searchAttributes?: SearchAttributes
+      args?: unknown[]
+    }) => {
+      return await this.temporalClient.workflow.start(workflowType, {
+        taskQueue,
+        workflowId,
+        searchAttributes,
+        args,
+      })
+    },
+  }
+  /**
+   * Temporal local activities (must be arrow functions)
+   */
+  temporalLocalActivities = {
+    /**
+     *
+     * @returns {Promise<string[]>}
+     */
+    getTelegramChatIds: async (): Promise<string[]> => {
+      return process.env.TEMPORAL_NOTIFICATION_CHAT_IDS_TELEGRAM.split(';')
+    },
+    /**
+     *
+     * @returns {Promise<string[]>}
+     */
+    getDiscordChatIds: async (): Promise<string[]> => {
+      return process.env.TEMPORAL_NOTIFICATION_CHAT_IDS_DISCORD.split(';')
     },
   }
 }
