@@ -11,6 +11,7 @@ import {
   OutPoint,
   ScriptType,
   SubscribeMsg,
+  Tx,
   Utxo,
   WsEndpoint,
 } from 'chronik-client'
@@ -37,8 +38,12 @@ export type AccountUtxo = ParsedUtxo & {
   userId: string
 }
 
-export declare interface WalletManager {
-  on(event: 'AddedToMempool', callback: (utxo: AccountUtxo) => void): this
+export interface WalletManager {
+  /** Emitted when a `WalletKey` receives an output from a standard transaction */
+  on(
+    event: 'AddedToMempool' | 'BlockConnected',
+    callback: (utxo: AccountUtxo, isCoinbase: boolean) => void,
+  ): this
 }
 
 export class WalletManager extends EventEmitter {
@@ -326,19 +331,27 @@ export class WalletManager extends EventEmitter {
   /** Detect and process Chronik WS messages */
   private _chronikHandleWsMessage = async (msg: SubscribeMsg) => {
     try {
-      if (msg.type != 'AddedToMempool') {
+      let tx: Tx
+      if (msg.type == 'BlockConnected') {
+        const block = await this.chronik.block(msg.blockHash)
+        tx = block.txs[0]
+      }
+      if (msg.type == 'AddedToMempool') {
+        tx = await this.chronik.tx(msg.txid)
+      }
+      // don't proceed without tx data
+      if (!tx) {
         return
       }
-      const { outputs } = await this.chronik.tx(msg.txid)
-      const outScripts = outputs.map(output => output.outputScript)
       // process each tx output
-      for (let i = 0; i < outScripts.length; i++) {
-        const scriptHex = outScripts[i]
+      for (let i = 0; i < tx.outputs.length; i++) {
+        const output = tx.outputs[i]
         // find userId/key matching output scriptHex
         for (const userIds of Object.values(this.accounts)) {
           const userId = userIds.find(userId => {
             const userScriptHex = this.keys[userId].script.toHex()
-            if (scriptHex == userScriptHex) {
+            if (output.outputScript == userScriptHex) {
+              // New tx has an output that matches one of our wallets
               return true
             }
           })
@@ -347,9 +360,9 @@ export class WalletManager extends EventEmitter {
           }
           // found our userId/key; save utxo
           const parsedUtxo = {
-            txid: msg.txid,
+            txid: tx.txid,
             outIdx: i,
-            value: outputs[i].value,
+            value: tx.outputs[i].value,
           }
           /**
            * Give transactions generate duplicate Chronik WS messages.
@@ -359,8 +372,12 @@ export class WalletManager extends EventEmitter {
             break
           }
           this.keys[userId].utxos.push(parsedUtxo)
-          this.emit('AddedToMempool', { ...parsedUtxo, userId })
-          break
+          this.emit(
+            msg.type,
+            { ...parsedUtxo, userId } as AccountUtxo,
+            tx.isCoinbase,
+          )
+          return
         }
       }
     } catch (e: any) {
