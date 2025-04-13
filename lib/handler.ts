@@ -25,7 +25,8 @@ export class Handler extends EventEmitter {
     this.prisma = prisma
     this.wallet = wallet
     // Set up event handlers once we are ready
-    this.wallet.on('AddedToMempool', this.walletUtxoAddedToMempool)
+    this.wallet.on('AddedToMempool', this.walletDepositReceived)
+    this.wallet.on('BlockConnected', this.walletDepositReceived)
   }
   /** Informational and error logging */
   log = (module: string, message: string) =>
@@ -52,7 +53,7 @@ export class Handler extends EventEmitter {
     }
   }
   /**  */
-  walletUtxoAddedToMempool = async (utxo: AccountUtxo) => {
+  walletDepositReceived = async (utxo: AccountUtxo, isCoinbase: boolean) => {
     try {
       await this._saveDeposit(utxo)
     } catch (e: any) {
