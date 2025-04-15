@@ -27,7 +27,7 @@ const parseLink = (text: string) => {
 const escape = (text: string) => text.replace(/(_)/g, '\\$1')
 
 export class Telegram implements Platform {
-  private bot: Telegraf
+  private client: Telegraf
   private handler: Handler
   private lastReplyTime: number
 
@@ -37,32 +37,32 @@ export class Telegram implements Platform {
   }
 
   setup = async (apiKey: string) => {
-    this.bot = new Telegraf(apiKey)
-    this.bot.command('give', this.handleGroupMessage)
-    this.bot.command('balance', this.handleDirectMessage)
-    this.bot.command('deposit', this.handleDirectMessage)
-    this.bot.command('withdraw', this.handleDirectMessage)
-    this.bot.command('link', this.handleDirectMessage)
-    this.bot.command('backup', this.handleDirectMessage)
-    this.bot.start(this.handleDirectMessage)
+    this.client = new Telegraf(apiKey)
+    this.client.command('give', this.handleGroupMessage)
+    this.client.command('balance', this.handleDirectMessage)
+    this.client.command('deposit', this.handleDirectMessage)
+    this.client.command('withdraw', this.handleDirectMessage)
+    this.client.command('link', this.handleDirectMessage)
+    this.client.command('backup', this.handleDirectMessage)
+    this.client.start(this.handleDirectMessage)
   }
   launch = async () => {
-    this.bot.launch()
+    this.client.launch()
     // once this promise resolves, bot is active
     // https://github.com/telegraf/telegraf/issues/1749
-    await this.bot.telegram.getMe()
+    await this.client.telegram.getMe()
   }
   stop = async () => {
-    this.bot?.stop()
+    this.client?.stop()
   }
-  getBotId = () => this.bot.botInfo?.id?.toString()
+  getBotId = () => this.client.botInfo?.id?.toString()
   notifyUser = async (
     platformOrChatId: string | number,
     msg: string,
     replyToMessageId?: number,
   ) => {
     try {
-      await this.bot.telegram.sendMessage(platformOrChatId, msg, {
+      await this.client.telegram.sendMessage(platformOrChatId, msg, {
         parse_mode: 'Markdown',
         reply_parameters: {
           message_id: replyToMessageId,
@@ -226,7 +226,7 @@ export class Telegram implements Platform {
       )
       await setTimeout(this.calcReplyDelay())
       if (typeof result == 'string') {
-        await this.bot.telegram.sendMessage(
+        await this.notifyUser(
           platformId,
           format(BOT.MESSAGE.LINK_FAIL, result),
         )
