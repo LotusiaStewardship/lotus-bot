@@ -7,6 +7,7 @@ import { split } from '../../util'
 import config from '../../config'
 import { Message } from 'telegraf/types'
 import { Handler } from '../handler'
+import { EventEmitter } from 'node:stream'
 
 const REPLIES_PER_SECOND = 20
 const parseGive = (text: string) => {
@@ -24,14 +25,33 @@ const parseLink = (text: string) => {
   const index = parts.findIndex(part => part.toLowerCase() == '/link')
   return index >= 0 ? parts.slice(index + 1, index + 2).pop() : undefined
 }
+const parseTemporalCommandContext = (ctx: Context) => {
+  const delim = config.temporal.command.delimiter
+  const messageText = String((ctx.message as any).text)
+  if (!messageText.match(delim)) {
+    return false
+  }
+  return messageText.split(delim)
+}
 const escape = (text: string) => text.replace(/(_)/g, '\\$1')
 
-export class Telegram implements Platform {
+export declare interface ITelegram extends Platform {
+  on(
+    event: 'temporalCommand',
+    callback: (data: { command: string; data: string[] }) => void,
+  ): this
+  emit(
+    event: 'temporalCommand',
+    data: { command: string; data: string[] },
+  ): boolean
+}
+
+export class Telegram extends EventEmitter implements ITelegram {
   private client: Telegraf
   private handler: Handler
   private lastReplyTime: number
-
   constructor(handler: Handler) {
+    super()
     this.handler = handler
     this.lastReplyTime = Date.now()
   }
@@ -45,6 +65,7 @@ export class Telegram implements Platform {
     this.client.command('link', this.handleDirectMessage)
     this.client.command('backup', this.handleDirectMessage)
     this.client.start(this.handleDirectMessage)
+    this.client.on('message', this.handleTemporalCommand)
   }
   launch = async () => {
     this.client.launch()
@@ -386,6 +407,30 @@ export class Telegram implements Platform {
     } catch (e: any) {
       throw new Error(`_handleGroupMessage: ${e.message}`)
     }
+  }
+
+  private handleTemporalCommand = async (ctx: Context) => {
+    // ignore command if not sent in DM
+    if (ctx.message.chat.type !== 'private') {
+      return
+    }
+    const fromId = ctx.message.from.id
+    // ignore command if not from approved admin
+    if (!config.temporal.command.admins.includes(String(fromId))) {
+      return
+    }
+    // return if array is invalid or if not enough chunks
+    const parsed = parseTemporalCommandContext(ctx)
+    if (!parsed) {
+      return
+    }
+    const [command, ...data] = parsed
+    // ignore command if not allowed
+    if (!config.temporal.command.enabled.includes(command)) {
+      return
+    }
+    // send the command and data up the chain
+    this.emit('temporalCommand', { command, data })
   }
 
   private calcReplyDelay = () => {

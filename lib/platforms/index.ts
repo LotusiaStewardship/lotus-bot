@@ -1,6 +1,7 @@
 import { Telegram } from './telegram'
 import { Twitter } from './twitter'
 import { Discord } from './discord'
+import { EventEmitter } from 'node:stream'
 
 export const Platforms = {
   telegram: Telegram,
@@ -9,7 +10,7 @@ export const Platforms = {
 }
 export type PlatformName = keyof typeof Platforms
 
-export interface Platform {
+export interface Platform extends EventEmitter {
   /**
    * Instantiate the bot with API key. Also set up event handlers.
    * @param key - API key, as String
@@ -19,6 +20,8 @@ export interface Platform {
   launch: () => Promise<void>
   /** Deactivate the bot */
   stop: () => Promise<void>
+  /**  */
+  getBotId: () => string
   /**
    *
    * @returns
@@ -33,4 +36,14 @@ export interface Platform {
     amount: string,
     balance: string,
   ) => Promise<void>
+
+  on(
+    event: 'temporalCommand',
+    callback: (data: { command: string; data: string[] }) => void,
+  ): this
+
+  emit(
+    event: 'temporalCommand',
+    { command, data }: { command: string; data: string[] },
+  ): boolean
 }

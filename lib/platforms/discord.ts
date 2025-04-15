@@ -17,6 +17,7 @@ import { format } from 'node:util'
 import { Platform } from '.'
 import config from '../../config'
 import { Handler } from '../handler'
+import { EventEmitter } from 'node:stream'
 
 // DM Branding
 const primaryColor: ColorResolvable = 0xa02fe4
@@ -34,8 +35,17 @@ type CommandOption = {
   description: string
   required: boolean
 }
-
-export class Discord implements Platform {
+export declare interface IDiscord extends Platform {
+  on(
+    event: 'temporalCommand',
+    callback: (data: { command: string; data: string[] }) => void,
+  ): this
+  emit(
+    event: 'temporalCommand',
+    data: { command: string; data: string[] },
+  ): boolean
+}
+export class Discord extends EventEmitter implements IDiscord {
   private lastReplyTime: number
   private handler: Handler
   private clientId: string
@@ -46,6 +56,7 @@ export class Discord implements Platform {
   private activityInterval: NodeJS.Timer
 
   constructor(handler: Handler) {
+    super()
     // Discord bot client and api setup
     this.handler = handler
     this.clientId = config.discord.clientId

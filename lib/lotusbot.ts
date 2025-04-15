@@ -3,10 +3,16 @@ import config from '../config'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
-import { Client, type SearchAttributes } from '@temporalio/client'
+import { Client } from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { Activities, LocalActivities } from './temporal'
 
+namespace Temporal {
+  export type Command = {
+    command: string
+    data: string[]
+  }
+}
 type SendMessageInput = {
   platform: PlatformName
   chatId: string
@@ -53,6 +59,7 @@ export default class LotusBot {
       if (apiKey) {
         this.platforms.push([name, apiKey])
         this.bots[name] = new Platforms[name](this.handler)
+        this.bots[name].on('temporalCommand', this.temporal.signalWorkflow)
       }
     }
   }
@@ -128,7 +135,7 @@ export default class LotusBot {
        * Initialize Temporal worker if all required parameters are configured
        */
       if (
-        !Object.values(config.temporalWorker).some(
+        !Object.values(config.temporal.worker).some(
           v => v === undefined || v === '',
         )
       ) {
@@ -140,15 +147,15 @@ export default class LotusBot {
           }
           // create client connection
           this.temporalClient = new Client({
-            namespace: config.temporalWorker.namespace,
+            namespace: config.temporal.worker.namespace,
           })
           // create worker
           this.worker = await Worker.create({
             connection: await NativeConnection.connect({
-              address: config.temporalWorker.host,
+              address: config.temporal.worker.host,
             }),
-            namespace: config.temporalWorker.namespace,
-            taskQueue: config.temporalWorker.taskQueue,
+            namespace: config.temporal.worker.namespace,
+            taskQueue: config.temporal.worker.taskQueue,
             activities,
             workflowBundle: {
               codePath: require.resolve('./temporal/workflows'),
@@ -172,6 +179,7 @@ export default class LotusBot {
     /** Shutdown enabled platforms */
     for (const [name] of this.platforms) {
       await this.bots[name]?.stop()
+      this.bots[name]?.removeAllListeners()
     }
     this.wallet?.closeWsEndpoint()
     await this.prisma?.disconnect()
@@ -212,6 +220,29 @@ export default class LotusBot {
       this._logPlatformNotifyError(platform, '_depositSaved', e.message)
     }
   }
+  temporal = {
+    /**
+     *
+     * @param param0
+     * @returns
+     */
+    signalWorkflow: async ({ command, data }: Temporal.Command) => {
+      const workflowType = config.temporal.command.workflow.type
+      const workflowId = config.temporal.command.workflow.id
+      const signal = config.temporal.command.workflow.signal
+      const taskQueue = config.temporal.worker.taskQueue
+      try {
+        await this.temporalClient.workflow.signalWithStart(workflowType, {
+          signal,
+          taskQueue,
+          workflowId,
+          signalArgs: [{ command, data }],
+        })
+      } catch (e) {
+        this._warn(MAIN, `Temporal: signalWorkflow: ${e.message}`)
+      }
+    },
+  }
   /**
    * Temporal activities (must be arrow functions)
    */
@@ -227,26 +258,6 @@ export default class LotusBot {
 
     sendLotus: async ({ scriptPayload, sats }: SendLotusInput) => {
       // TODO: implement this
-    },
-    startWorkflow: async ({
-      taskQueue,
-      workflowType,
-      workflowId,
-      searchAttributes,
-      args,
-    }: {
-      taskQueue: string
-      workflowType: string
-      workflowId: string
-      searchAttributes?: SearchAttributes
-      args?: unknown[]
-    }) => {
-      return await this.temporalClient.workflow.start(workflowType, {
-        taskQueue,
-        workflowId,
-        searchAttributes,
-        args,
-      })
     },
   }
   /**
