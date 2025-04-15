@@ -331,6 +331,14 @@ export class Telegram implements Platform {
       const fromUsername =
         ctx.message.from.username || ctx.message.from.first_name
       const repliedMessage = <Message>(<any>ctx.message).reply_to_message
+      // bugfix: don't allow giving to channel messages
+      if (repliedMessage.sender_chat?.type === 'channel') {
+        return await ctx.sendMessage(BOT.MESSAGE.ERR_GIVE_TO_CHANNEL_DISALLOWED, {
+          reply_parameters: {
+            message_id: replyToMessageId,
+          },
+        })
+      }
       const toId = repliedMessage?.from?.id
       const toUsername =
         repliedMessage?.from?.username || repliedMessage?.from?.first_name

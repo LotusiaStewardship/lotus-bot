@@ -9,6 +9,7 @@ export const BOT = {
     ERR_MUST_GIVE_TO_OTHER_USER: 'You cannot give Lotus to yourself. :)',
     ERR_GIVE_MUST_REPLY_TO_USER:
       'You must reply to another user to give Lotus.',
+    ERR_GIVE_TO_CHANNEL_DISALLOWED: `You cannot give Lotus to a Telegram channel.`,
     ERR_AMOUNT_INVALID: 'Invalid amount specified.',
     ERR_GIVE_TO_BOT:
       'I appreciate the thought, but you cannot give me Lotus. :)',
