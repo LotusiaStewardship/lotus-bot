@@ -18,10 +18,22 @@ export type ParsedConfig = {
     }
   }
   dbUrl: string
-  temporalWorker: {
-    host: string
-    namespace: string
-    taskQueue: string
+  temporal: {
+    worker: {
+      host: string
+      namespace: string
+      taskQueue: string
+    }
+    command: {
+      delimiter: string
+      admins: string[]
+      enabled: string[]
+      workflow: {
+        type: string
+        id: string
+        signal: string
+      }
+    }
   }
 }
 
@@ -53,10 +65,22 @@ export class Config {
         },
       },
       dbUrl: process.env.DATABASE_URL,
-      temporalWorker: {
-        host: process.env.TEMPORAL_HOST,
-        namespace: process.env.TEMPORAL_NAMESPACE,
-        taskQueue: process.env.TEMPORAL_TASKQUEUE,
+      temporal: {
+        worker: {
+          host: process.env.TEMPORAL_HOST,
+          namespace: process.env.TEMPORAL_NAMESPACE,
+          taskQueue: process.env.TEMPORAL_TASKQUEUE,
+        },
+        command: {
+          delimiter: process.env.TEMPORAL_COMMAND_DELIM,
+          admins: process.env.TEMPORAL_COMMAND_ADMINS.split(','),
+          enabled: process.env.TEMPORAL_COMMAND_ENABLED.split(','),
+          workflow: {
+            type: process.env.TEMPORAL_COMMAND_WORKFLOW_TYPE,
+            id: process.env.TEMPORAL_COMMAND_WORKFLOW_ID,
+            signal: process.env.TEMPORAL_COMMAND_WORKFLOW_SIGNAL,
+          },
+        },
       },
     }
   }

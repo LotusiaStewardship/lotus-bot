@@ -1,8 +1,19 @@
+import { EventEmitter } from 'node:stream'
 import { Platform } from '.'
 
 export type TwitterMessage = {}
 
-export class Twitter implements Platform {
+export declare interface ITwitter extends Platform {
+  on(
+    event: 'temporalCommand',
+    callback: (data: { command: string; data: string[] }) => void,
+  ): this
+  emit(
+    event: 'temporalCommand',
+    data: { command: string; data: string[] },
+  ): boolean
+}
+export class Twitter extends EventEmitter implements ITwitter {
   setup = async () => {}
   launch = async () => {}
   stop = async () => {}
