@@ -199,13 +199,14 @@ export class Discord implements Platform {
         'discord',
         platformId,
       )
-      const depositReplyEmbed = new EmbedBuilder()
-        .setColor(primaryColor)
-        .setTitle(`View address on the Explorer`)
-        .setURL(`${config.wallet.explorerUrl}/address/${address}`)
-        .setDescription('Send Lotus here to fund your account')
-        .addFields({ name: 'Lotus Address', value: address })
-        .setImage(`${config.wallet.explorerUrl}/qr/${address}`)
+      const depositReplyEmbed = new EmbedBuilder({
+        color: primaryColor as number,
+        title: `View address on the Explorer`,
+        url: `${config.wallet.explorerUrl}/address/${address}`,
+        description: 'Send Lotus here to fund your account',
+        fields: [{ name: 'Lotus Address', value: address }],
+        image: { url: `${config.wallet.explorerUrl}/qr/${address}` },
+      })
       await interaction.reply({
         embeds: [depositReplyEmbed],
         ephemeral: true,
