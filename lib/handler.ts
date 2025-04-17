@@ -1,7 +1,8 @@
 import { PlatformName } from './platforms'
 import * as Util from '../util'
-import { TRANSACTION } from '../util/constants'
-import { AccountUtxo, WalletManager } from './wallet'
+import { BOT, TRANSACTION } from '../util/constants'
+import { Wallet } from '../util/types'
+import { WalletManager } from './wallet'
 import { Database } from './database'
 import { EventEmitter } from 'events'
 
@@ -36,6 +37,29 @@ export class Handler extends EventEmitter {
   shutdown = () => this.emit('Shutdown')
   /** Make sure we process deposits we received while offline */
   init = async () => {
+    this.log(MAIN, `checking bot wallet exists`)
+    try {
+      if (!this.wallet.getXAddress(BOT.USER.userId)) {
+        const { accountId, userId } = BOT.USER
+        const secret = Util.newUUID()
+        const mnemonic = WalletManager.newMnemonic()
+        const hdPrivKey = WalletManager.newHDPrivateKey(mnemonic)
+        const hdPubKey = hdPrivKey.hdPublicKey
+        await this.prisma.saveAccount({
+          accountId,
+          userId,
+          secret,
+          mnemonic: mnemonic.toString(),
+          hdPrivKey: hdPrivKey.toString(),
+          hdPubKey: hdPubKey.toString(),
+        })
+        await this.wallet.loadKey({ accountId, userId, hdPrivKey })
+        this.log(MAIN, `created and loaded bot wallet`)
+      }
+    } catch (e) {
+      throw new Error(`init: ${e.message}`)
+    }
+    this.log(MAIN, `bot address: ${this.wallet.getXAddress(BOT.USER.userId)}`)
     this.log(MAIN, `reconciling deposits with UTXO set`)
     try {
       const utxos = this.wallet.getUtxos()
@@ -53,7 +77,7 @@ export class Handler extends EventEmitter {
     }
   }
   /**  */
-  walletDepositReceived = async (utxo: AccountUtxo, isCoinbase: boolean) => {
+  walletDepositReceived = async (utxo: Wallet.AccountUtxo) => {
     try {
       await this._saveDeposit(utxo)
     } catch (e: any) {
@@ -305,7 +329,7 @@ export class Handler extends EventEmitter {
     }
   }
 
-  private _saveDeposit = async (utxo: AccountUtxo) => {
+  private _saveDeposit = async (utxo: Wallet.AccountUtxo) => {
     try {
       if (
         (await this.prisma.isGiveTx(utxo.txid)) ||

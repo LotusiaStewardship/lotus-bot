@@ -6,23 +6,7 @@ import { Handler } from './handler'
 import { Client } from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { Activities, LocalActivities } from './temporal'
-
-namespace Temporal {
-  export type Command = {
-    command: string
-    data: string[]
-  }
-}
-type SendMessageInput = {
-  platform: PlatformName
-  chatId: string
-  message: string
-}
-
-type SendLotusInput = {
-  scriptPayload: string
-  sats: string
-}
+import type { Temporal } from '../util/types'
 
 // Constants used for logging purposes
 const WALLET = 'walletmanager'
@@ -252,11 +236,15 @@ export default class LotusBot {
      * @param param0
      * @returns
      */
-    sendMessage: async ({ platform, chatId, message }: SendMessageInput) => {
+    sendMessage: async ({
+      platform,
+      chatId,
+      message,
+    }: Temporal.SendMessageInput) => {
       await this.bots[platform].sendMessage(chatId, message)
     },
 
-    sendLotus: async ({ scriptPayload, sats }: SendLotusInput) => {
+    sendLotus: async ({ scriptPayload, sats }: Temporal.SendLotusInput) => {
       // TODO: implement this
     },
   }

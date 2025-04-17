@@ -1,27 +1,6 @@
 import { PrismaClient } from '../prisma/prisma-client-js'
-import type { AccountUtxo } from './wallet'
 import type { PlatformName } from './platforms'
-
-type Deposit = AccountUtxo & {
-  timestamp: Date
-  confirmed?: boolean
-}
-
-type Give = {
-  txid: string
-  platform: string
-  timestamp: Date
-  fromId: string
-  toId: string
-  value: string
-}
-
-type Withdrawal = {
-  txid: string
-  value: string
-  timestamp: Date
-  userId: string
-}
+import type { Wallet } from '../util/types'
 
 enum PlatformUserTable {
   telegram = 'userTelegram',
@@ -271,7 +250,7 @@ export class Database {
    * Save the deposit received as UTXO from Chronik API
    * Return the `platformId`s to notify the user
    */
-  saveDeposit = async (data: Deposit) => {
+  saveDeposit = async (data: Wallet.Deposit) => {
     try {
       const result = await this.prisma.deposit.create({
         data,
@@ -309,14 +288,14 @@ export class Database {
       throw new Error(`deleteWithdrawal: ${e.message}`)
     }
   }
-  saveGive = async (data: Give) => {
+  saveGive = async (data: Wallet.Give) => {
     try {
       await this.prisma.give.create({ data })
     } catch (e: any) {
       throw new Error(`saveGive: ${e.message}`)
     }
   }
-  saveWithdrawal = async (data: Withdrawal) => {
+  saveWithdrawal = async (data: Wallet.Withdrawal) => {
     try {
       await this.prisma.withdrawal.create({ data })
     } catch (e: any) {

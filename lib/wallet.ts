@@ -18,31 +18,13 @@ import {
 import config from '../config'
 import { WALLET } from '../util/constants'
 import { EventEmitter } from 'node:events'
-
-type WalletKey = {
-  signingKey: PrivateKey
-  address: Address
-  script: Script
-  scriptHex: string
-  scriptType: ScriptType
-  utxos: ParsedUtxo[]
-}
-
-type ParsedUtxo = {
-  txid: string
-  outIdx: number
-  value: string
-}
-
-export type AccountUtxo = ParsedUtxo & {
-  userId: string
-}
+import type { Wallet } from '../util/types'
 
 export interface WalletManager {
   /** Emitted when a `WalletKey` receives an output from a standard transaction */
   on(
     event: 'AddedToMempool' | 'BlockConnected',
-    callback: (utxo: AccountUtxo, isCoinbase: boolean) => void,
+    callback: (utxo: Wallet.AccountUtxo) => void,
   ): this
 }
 
@@ -51,7 +33,7 @@ export class WalletManager extends EventEmitter {
   private chronik: ChronikClient
   private chronikWs: WsEndpoint
   // Wallet properties
-  private keys: { [userId: string]: WalletKey } = {}
+  private keys: { [userId: string]: Wallet.Key } = {}
   /** Array of associated `userId` strings for each `accountId` */
   private accounts: { [accountId: string]: string[] } = {}
   /** Provides all off- and on-chain wallet functionality */
@@ -92,7 +74,7 @@ export class WalletManager extends EventEmitter {
   }
   /** Get the UTXOs for every `WalletKey` */
   getUtxos = () => {
-    const utxos: AccountUtxo[] = []
+    const utxos: Wallet.AccountUtxo[] = []
     for (const userIds of Object.values(this.accounts)) {
       userIds.forEach(userId =>
         utxos.push(
@@ -119,7 +101,7 @@ export class WalletManager extends EventEmitter {
     }
   }
   /** Return the XAddress of the `WalletKey` of `userId` */
-  getXAddress = (userId: string) => this.keys[userId].address.toXAddress()
+  getXAddress = (userId: string) => this.keys[userId]?.address?.toXAddress()
   getXAddresses = (accountId: string) => {
     return this.accounts[accountId].map(userId => {
       return this.keys[userId].address.toXAddress()
@@ -258,7 +240,7 @@ export class WalletManager extends EventEmitter {
   /**
    * Ensure Chronik `AddedToMempool` doesn't corrupt the in-memory UTXO set
    */
-  private _isExistingUtxo = (userId: string, utxo: ParsedUtxo) => {
+  private _isExistingUtxo = (userId: string, utxo: Wallet.ParsedUtxo) => {
     return this.keys[userId].utxos.find(existing => {
       return existing.txid == utxo.txid && existing.outIdx == utxo.outIdx
     })
@@ -374,7 +356,7 @@ export class WalletManager extends EventEmitter {
           this.keys[userId].utxos.push(parsedUtxo)
           this.emit(
             msg.type,
-            { ...parsedUtxo, userId } as AccountUtxo,
+            { ...parsedUtxo, userId } as Wallet.AccountUtxo,
             tx.isCoinbase,
           )
           return
@@ -401,7 +383,7 @@ export class WalletManager extends EventEmitter {
     return { txid, outIdx, value }
   }
   /** Create Bitcore-compatible P2PKH `Transaction.Input` */
-  private _toPKHInput = (utxo: ParsedUtxo, script: Script) => {
+  private _toPKHInput = (utxo: Wallet.ParsedUtxo, script: Script) => {
     try {
       return new Transaction.Input.PublicKeyHash({
         prevTxId: utxo.txid,
@@ -429,7 +411,7 @@ export class WalletManager extends EventEmitter {
   /** Instantiate Prisma HDPrivateKey buffer as `HDPrivateKey` */
   static hdPrivKeyFromBuffer = (hdPrivKeyBuf: Buffer) =>
     new HDPrivateKey(hdPrivKeyBuf)
-  static toOutpoint = (utxo: ParsedUtxo): OutPoint => {
+  static toOutpoint = (utxo: Wallet.ParsedUtxo): OutPoint => {
     return {
       txid: utxo.txid,
       outIdx: utxo.outIdx,
