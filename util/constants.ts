@@ -3,6 +3,14 @@ export const XPI_DIVISOR = 1000000
 
 // Default bot database properties
 export const BOT = {
+  USER: {
+    userId: 'bot',
+    accountId: 'bot',
+    secret: null,
+    mnemonic: null,
+    hdPrivKey: null,
+    hdPubKey: null,
+  },
   MESSAGE: {
     ERR_DM_COMMAND: 'Please send me this command in a DM.',
     ERR_NOT_DM_COMMAND: 'This command does not work in a DM.',
