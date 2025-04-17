@@ -282,6 +282,42 @@ export class Handler extends EventEmitter {
     const mnemonic = await this.prisma.getUserMnemonic(userId)
     return mnemonic
   }
+  /**
+   * Activity function implementations, called by `LotusBot` during Workflow
+   * Execution
+   *
+   * NOTE: must be arrow functions for correct `this` context
+   */
+  temporal = {
+    /**
+     *
+     * @param param0
+     * @returns
+     */
+    sendLotus: async ({
+      scriptPayload,
+      sats,
+    }: {
+      scriptPayload: string
+      sats: string
+    }): Promise<string> => {
+      const outAddress =
+        WalletManager.toXAddressFromScriptPayload(scriptPayload)
+      const changeAddress = this.wallet.getXAddress(BOT.USER.userId)
+      const signingKey = this.wallet.getSigningKey(BOT.USER.userId)
+      const utxos = this.wallet.getUtxosByUserId(BOT.USER.userId)
+      const tx = WalletManager.craftSendLotusTransaction({
+        outAddress,
+        outValue: sats,
+        changeAddress,
+        utxos,
+        inAddress: changeAddress,
+        signingKey,
+      })
+      //return await this.wallet.broadcastTx(tx)
+      return tx.txid
+    },
+  }
 
   /**
    * Checks if `platformId` of `platform` is valid.
