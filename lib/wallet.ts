@@ -17,7 +17,7 @@ import {
   WsEndpoint,
 } from 'chronik-client'
 import config from '../config'
-import { WALLET } from '../util/constants'
+import { BOT, WALLET } from '../util/constants'
 import { EventEmitter } from 'node:events'
 import type { Wallet } from '../util/types'
 
@@ -342,6 +342,10 @@ export class WalletManager extends EventEmitter {
           })
           if (!userId) {
             continue
+          }
+          // ignore messages for bot wallet
+          if (userId == BOT.USER.userId) {
+            return
           }
           // found our userId/key; save utxo
           const parsedUtxo = {
