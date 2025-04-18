@@ -1,6 +1,7 @@
 import {
   Address,
   HDPrivateKey,
+  Networks,
   PrivateKey,
   Script,
   Transaction,
@@ -86,6 +87,7 @@ export class WalletManager extends EventEmitter {
     }
     return utxos
   }
+  getUtxosByUserId = (userId: string) => this.keys[userId].utxos
   /** Get the UTXO balance for the provided `accountId` */
   getAccountBalance = async (accountId: string) => {
     let sats = 0
@@ -102,6 +104,7 @@ export class WalletManager extends EventEmitter {
   }
   /** Return the XAddress of the `WalletKey` of `userId` */
   getXAddress = (userId: string) => this.keys[userId]?.address?.toXAddress()
+  getSigningKey = (userId: string) => this.keys[userId]?.signingKey
   getXAddresses = (accountId: string) => {
     return this.accounts[accountId].map(userId => {
       return this.keys[userId].address.toXAddress()
@@ -416,6 +419,71 @@ export class WalletManager extends EventEmitter {
       txid: utxo.txid,
       outIdx: utxo.outIdx,
     }
+  }
+  /**
+   * Convert Chronik-compatible 20-byte P2PKH to Lotus XAddress format
+   * @param scriptPayload
+   * @returns
+   */
+  static toXAddressFromScriptPayload = (scriptPayload: string) =>
+    Address.fromPublicKeyHash(
+      Buffer.from(scriptPayload, 'hex'),
+      Networks.livenet,
+    ).toXAddress()
+  /**
+   * Static method to generate Lotus send transaction. Primarily useful for
+   * Temporal Activity Execution
+   * @param param0
+   * @returns {Transaction}
+   */
+  static craftSendLotusTransaction = ({
+    outAddress,
+    outValue,
+    changeAddress,
+    utxos,
+    inAddress,
+    signingKey,
+  }: {
+    outAddress: string
+    outValue: string
+    changeAddress: string
+    utxos: Wallet.ParsedUtxo[]
+    inAddress: string
+    signingKey: PrivateKey
+  }): Transaction => {
+    // set up transaction with base parameters
+    const tx = new Transaction()
+    tx.feePerByte(config.wallet.tx.feeRate)
+    tx.change(changeAddress)
+    // input address to script
+    const inScript = Script.fromAddress(inAddress)
+    // add utxos to inputs until sufficient input amount gathered
+    for (const utxo of utxos) {
+      tx.addInput(
+        new Transaction.Input.PublicKeyHash({
+          prevTxId: utxo.txid,
+          outputIndex: utxo.outIdx,
+          output: new Transaction.Output({
+            satoshis: Number(utxo.value),
+            script: inScript,
+          }),
+          script: inScript,
+        }),
+      )
+      if (tx.inputAmount > Number(outValue)) {
+        break
+      }
+    }
+    // add output address
+    tx.addOutput(
+      new Transaction.Output({
+        satoshis: Number(outValue),
+        script: Script.fromAddress(outAddress),
+      }),
+    )
+    // sign and deliver
+    tx.sign(signingKey)
+    return tx
   }
   static isValidAddress = (address: string) => Address.isValid(address)
   static WITHDRAW_CHANGE_OUTIDX = 1

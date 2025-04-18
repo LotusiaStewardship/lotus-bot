@@ -3,7 +3,7 @@ import config from '../config'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
-import { Client } from '@temporalio/client'
+import { Client, type SearchAttributes } from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { Activities, LocalActivities } from './temporal'
 import type { Temporal } from '../util/types'
@@ -43,7 +43,10 @@ export default class LotusBot {
       if (apiKey) {
         this.platforms.push([name, apiKey])
         this.bots[name] = new Platforms[name](this.handler)
-        this.bots[name].on('temporalCommand', this.temporal.signalWorkflow)
+        this.bots[name].on(
+          'temporalCommand',
+          this.temporalActivities.signalWorkflow,
+        )
       }
     }
   }
@@ -204,7 +207,59 @@ export default class LotusBot {
       this._logPlatformNotifyError(platform, '_depositSaved', e.message)
     }
   }
-  temporal = {
+  /**
+   * Temporal activities (must be arrow functions)
+   */
+  temporalActivities = {
+    /**
+     * Activity to send outbound `message` to the specified `chatId` using
+     * the corresponding `platform` instance
+     * @param param0
+     * @returns {Promise<unknown>}
+     */
+    sendMessage: async ({
+      platform,
+      chatId,
+      message,
+    }: Temporal.SendMessageInput): Promise<unknown> => {
+      return await this.bots[platform].sendMessage(chatId, message)
+    },
+    /**
+     * Activity to send `sats` amount of Lotus to the specified `scriptPayload`
+     * @param param0
+     * @returns {Promise<string>} Transaction ID returned from Chronik `broadcastTx`
+     */
+    sendLotus: async ({
+      scriptPayload,
+      sats,
+    }: Temporal.SendLotusInput): Promise<string> => {
+      return await this.handler.temporal.sendLotus({ scriptPayload, sats })
+    },
+    /**
+     *
+     * @param param0
+     * @returns
+     */
+    startWorkflow: async ({
+      taskQueue,
+      workflowType,
+      workflowId,
+      searchAttributes,
+      args,
+    }: {
+      taskQueue: string
+      workflowType: string
+      workflowId: string
+      searchAttributes?: SearchAttributes
+      args?: unknown[]
+    }) => {
+      return await this.temporalClient.workflow.start(workflowType, {
+        taskQueue,
+        workflowId,
+        searchAttributes,
+        args,
+      })
+    },
     /**
      *
      * @param param0
@@ -225,27 +280,6 @@ export default class LotusBot {
       } catch (e) {
         this._warn(MAIN, `Temporal: signalWorkflow: ${e.message}`)
       }
-    },
-  }
-  /**
-   * Temporal activities (must be arrow functions)
-   */
-  temporalActivities = {
-    /**
-     *
-     * @param param0
-     * @returns
-     */
-    sendMessage: async ({
-      platform,
-      chatId,
-      message,
-    }: Temporal.SendMessageInput) => {
-      await this.bots[platform].sendMessage(chatId, message)
-    },
-
-    sendLotus: async ({ scriptPayload, sats }: Temporal.SendLotusInput) => {
-      // TODO: implement this
     },
   }
   /**
