@@ -106,17 +106,32 @@ export class Handler extends EventEmitter {
     const { userId } = await this._getIds(platform, platformId)
     return this.wallet.getXAddress(userId)
   }
-
-  processGiveCommand = async (
-    platform: PlatformName,
-    fromId: string,
-    fromUsername: string,
-    toId: string,
-    toUsername: string,
-    value: string,
-  ) => {
+  /**
+   *
+   * @param param0
+   * @returns
+   */
+  processGiveCommand = async ({
+    platform,
+    chatId,
+    fromId,
+    fromUsername,
+    toId,
+    toUsername,
+    value,
+    isBotDonation,
+  }: {
+    platform: PlatformName
+    chatId?: number
+    fromId: string
+    fromUsername: string
+    toId: string
+    toUsername: string
+    value: string
+    isBotDonation: boolean
+  }) => {
     const sats = Util.toSats(value)
-    const msg = `${fromId}: give: ${fromUsername} -> ${toId} (${toUsername}): ${sats} sats`
+    const msg = `chatId ${chatId}: fromId ${fromId}: give: ${fromUsername} -> ${toId} (${toUsername}): ${sats} sats`
     this.log(platform, `${msg}: command received`)
     if (sats < MIN_OUTPUT_AMOUNT) {
       throw new Error(`${msg}: ERROR: minimum required: ${MIN_OUTPUT_AMOUNT}`)
@@ -130,8 +145,10 @@ export class Handler extends EventEmitter {
     if (sats > balance) {
       throw new Error(`${msg}: ERROR: insufficient balance: ${balance}`)
     }
-    // Create account for toId if not exist
-    const { userId: toUserId } = await this._getIds(platform, toId)
+    // If this is donation to bot, pull that wallet key without db query
+    const toUserId = isBotDonation
+      ? BOT.USER.userId
+      : (await this._getIds(platform, toId)).userId
     // Give successful; broadcast tx and save to db
     const tx = await this.wallet.genTx('give', {
       fromAccountId,
@@ -314,8 +331,8 @@ export class Handler extends EventEmitter {
         inAddress: changeAddress,
         signingKey,
       })
-      //return await this.wallet.broadcastTx(tx)
-      return tx.txid
+      return await this.wallet.broadcastTx(tx)
+      //return tx.txid
     },
   }
 
