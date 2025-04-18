@@ -83,6 +83,10 @@ export class Telegram extends EventEmitter implements ITelegram {
     replyToMessageId?: number,
   ) => {
     try {
+      this.handler.log(
+        'telegram',
+        `platformOrChatId ${platformOrChatId}: replyToMessageId ${replyToMessageId}: sending notification`,
+      )
       await this.client.telegram.sendMessage(platformOrChatId, msg, {
         parse_mode: 'Markdown',
         reply_parameters: {
@@ -175,20 +179,24 @@ export class Telegram extends EventEmitter implements ITelegram {
     toId: string,
     toUsername: string,
     value: string,
+    isBotDonation: boolean,
   ) => {
     try {
-      const { txid, amount } = await this.handler.processGiveCommand(
-        'telegram',
+      const { txid, amount } = await this.handler.processGiveCommand({
+        platform: 'telegram',
+        chatId,
         fromId,
         fromUsername,
         toId,
         toUsername,
         value,
-      )
+        isBotDonation,
+      })
       const fromUsernameEscaped = escape(fromUsername)
       const toUsernameEscaped = escape(toUsername)
+      const reply = isBotDonation ? BOT.MESSAGE.DONATION : BOT.MESSAGE.GIVE
       const msg = format(
-        BOT.MESSAGE.GIVE,
+        reply,
         fromUsernameEscaped,
         amount,
         toUsernameEscaped,
@@ -197,7 +205,10 @@ export class Telegram extends EventEmitter implements ITelegram {
       await setTimeout(this.calcReplyDelay())
       await this.notifyUser(chatId, msg, replyToMessageId)
     } catch (e: any) {
-      this.handler.log('telegram', `${fromId}: handleGiveCommand: ${e.message}`)
+      this.handler.log(
+        'telegram',
+        `chatId ${chatId}: fromId ${fromId}: handleGiveCommand: ${e.message}`,
+      )
     } finally {
       this.lastReplyTime = Date.now()
     }
@@ -247,10 +258,7 @@ export class Telegram extends EventEmitter implements ITelegram {
       )
       await setTimeout(this.calcReplyDelay())
       if (typeof result == 'string') {
-        await this.notifyUser(
-          platformId,
-          format(BOT.MESSAGE.LINK_FAIL, result),
-        )
+        await this.notifyUser(platformId, format(BOT.MESSAGE.LINK_FAIL, result))
         throw new Error(result)
       }
       const msg =
@@ -353,12 +361,15 @@ export class Telegram extends EventEmitter implements ITelegram {
         ctx.message.from.username || ctx.message.from.first_name
       const repliedMessage = <Message>(<any>ctx.message).reply_to_message
       // bugfix: don't allow giving to channel messages
-      if (repliedMessage.sender_chat?.type === 'channel') {
-        return await ctx.sendMessage(BOT.MESSAGE.ERR_GIVE_TO_CHANNEL_DISALLOWED, {
-          reply_parameters: {
-            message_id: replyToMessageId,
+      if (repliedMessage?.sender_chat?.type === 'channel') {
+        return await ctx.sendMessage(
+          BOT.MESSAGE.ERR_GIVE_TO_CHANNEL_DISALLOWED,
+          {
+            reply_parameters: {
+              message_id: replyToMessageId,
+            },
           },
-        })
+        )
       }
       const toId = repliedMessage?.from?.id
       const toUsername =
@@ -377,12 +388,20 @@ export class Telegram extends EventEmitter implements ITelegram {
               },
             )
           }
+          // Bot now has its own wallet that is open for donations
+          // tell the give command handler this is destined for the bot
+          // this ensures that the correct wallet key is used for tx craft
+          // the bot IDs are not saved to platform database tables, but may need to be
+          let isBotDonation = false
           if (toId == ctx.botInfo.id) {
+            isBotDonation = true
+            /*
             return await ctx.sendMessage(BOT.MESSAGE.ERR_GIVE_TO_BOT, {
               reply_parameters: {
                 message_id: replyToMessageId,
               },
             })
+            */
           }
           const messageText = <string>(<any>ctx.message).text
           const amount = parseGive(messageText)
@@ -402,6 +421,7 @@ export class Telegram extends EventEmitter implements ITelegram {
             toId.toString(),
             toUsername,
             amount,
+            isBotDonation,
           )
       }
     } catch (e: any) {

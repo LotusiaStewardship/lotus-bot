@@ -21,6 +21,10 @@ export const BOT = {
     ERR_AMOUNT_INVALID: 'Invalid amount specified.',
     ERR_GIVE_TO_BOT:
       'I appreciate the thought, but you cannot give me Lotus. :)',
+    DONATION:
+      `%s, you have donated %s XPI %s! 🪷\r\n\r\n` +
+      `The community fund grows ever larger. Your generosity is greatly appreciated!\r\n\r\n` +
+      `[View tx on the Explorer](%s)`,
     GIVE:
       `%s, you have given %s XPI to %s! 🪷\r\n\r\n` +
       `[View tx on the Explorer](%s)`,

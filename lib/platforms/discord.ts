@@ -237,25 +237,28 @@ export class Discord extends EventEmitter implements IDiscord {
     toId: string,
     toUsername: string,
     value: string,
+    isBotDonation: boolean,
   ) => {
     try {
-      const { txid, amount } = await this.handler.processGiveCommand(
-        'discord',
+      const { txid, amount } = await this.handler.processGiveCommand({
+        platform: 'discord',
         fromId,
         fromUsername,
         toId,
         toUsername,
         value,
-      )
+        isBotDonation,
+      })
       const fromUser = `<@${fromId}>`
       const toUser = `<@${toId}>`
+      const reply = isBotDonation
+        ? `${fromUser}, you have donated ${amount} XPI to the community fund! Your generosity is greatly appreciated 🪷`
+        : `${fromUser}, you have given ${amount} XPI to ${toUser}! 🪷`
       const giveReplyEmbed = new EmbedBuilder()
         .setColor(primaryColor)
         .setTitle(`🪷 Click Here to see the tx 🪷`)
         .setURL(`${config.wallet.explorerUrl}/tx/${txid}`)
-        .setDescription(
-          `${fromUser}, you have given ${amount} XPI to ${toUser}! 🪷`,
-        )
+        .setDescription(reply)
       await interaction.reply({ embeds: [giveReplyEmbed] })
     } catch (e: any) {
       this.handler.log('discord', `${fromId}: handleGiveCommand: ${e.message}`)
@@ -501,13 +504,17 @@ export class Discord extends EventEmitter implements IDiscord {
             })
             break
           }
-          // can't give to bot
+          // tag this as donation
+          let isBotDonation = false
           if (this.clientId == to.id) {
+            isBotDonation = true
+            /*
             await interaction.reply({
               content: format(BOT.MESSAGE.ERR_GIVE_TO_BOT),
               ephemeral: true,
             })
             break
+            */
           }
           await this.handleGiveCommand(
             interaction,
@@ -516,6 +523,7 @@ export class Discord extends EventEmitter implements IDiscord {
             toId,
             toUsername,
             giveAmount,
+            isBotDonation,
           )
           break
         case 'balance':
