@@ -343,6 +343,10 @@ export class WalletManager extends EventEmitter {
           if (!userId) {
             continue
           }
+          // ignore messages for bot wallet
+          if (userId == BOT.USER.userId) {
+            return
+          }
           // found our userId/key; save utxo
           const parsedUtxo = {
             txid: tx.txid,
