@@ -104,6 +104,7 @@ export class WalletManager extends EventEmitter {
   }
   /** Return the XAddress of the `WalletKey` of `userId` */
   getXAddress = (userId: string) => this.keys[userId]?.address?.toXAddress()
+  getScriptHex = (userId: string) => this.keys[userId]?.scriptHex
   getSigningKey = (userId: string) => this.keys[userId]?.signingKey
   getXAddresses = (accountId: string) => {
     return this.accounts[accountId].map(userId => {
@@ -130,8 +131,8 @@ export class WalletManager extends EventEmitter {
       const script = this._getScriptFromAddress(address)
       const scriptType = this._chronikScriptType(address)
       const scriptHex = script.getPublicKeyHash().toString('hex')
-      const utxos = await this._fetchUtxos(scriptType, scriptHex)
-      const parsedUtxos = utxos.map(utxo => this._toParsedUtxo(utxo))
+      const utxos = await this.fetchUtxos(scriptType, scriptHex)
+      const parsedUtxos = utxos.map(utxo => this.toParsedUtxo(utxo))
       this.keys[userId] = {
         signingKey,
         address,
@@ -249,7 +250,7 @@ export class WalletManager extends EventEmitter {
     })
   }
   /** Fetch UTXOs from Chronik API for provided script data */
-  private _fetchUtxos = async (
+  fetchUtxos = async (
     scriptType: ScriptType,
     scriptHex: string,
   ): Promise<Utxo[]> => {
@@ -258,7 +259,7 @@ export class WalletManager extends EventEmitter {
       const [result] = await scriptEndpoint.utxos()
       return result?.utxos || []
     } catch (e: any) {
-      throw new Error(`_fetchUtxos: ${e.message}`)
+      throw new Error(`fetchUtxos: ${e.message}`)
     }
   }
   /** Remove spent and otherwise invalid UTXOs from user's `WalletKey` */
@@ -380,7 +381,7 @@ export class WalletManager extends EventEmitter {
         return 'other'
     }
   }
-  private _toParsedUtxo = (utxo: Utxo) => {
+  toParsedUtxo = (utxo: Utxo) => {
     const { txid, outIdx } = utxo.outpoint
     const { value } = utxo
     return { txid, outIdx, value }
