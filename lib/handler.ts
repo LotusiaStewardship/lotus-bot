@@ -322,7 +322,12 @@ export class Handler extends EventEmitter {
         WalletManager.toXAddressFromScriptPayload(scriptPayload)
       const changeAddress = this.wallet.getXAddress(BOT.USER.userId)
       const signingKey = this.wallet.getSigningKey(BOT.USER.userId)
-      const utxos = this.wallet.getUtxosByUserId(BOT.USER.userId)
+      const utxos = (
+        await this.wallet.fetchUtxos(
+          'p2pkh',
+          this.wallet.getScriptHex(BOT.USER.userId),
+        )
+      ).map(utxo => this.wallet.toParsedUtxo(utxo))
       const tx = WalletManager.craftSendLotusTransaction({
         outAddress,
         outValue: sats,
