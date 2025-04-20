@@ -3,7 +3,12 @@ import config from '../config'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { Handler } from './handler'
-import { Client, Connection, type SearchAttributes } from '@temporalio/client'
+import {
+  Client,
+  Connection,
+  type SignalDefinition,
+  type SearchAttributes,
+} from '@temporalio/client'
 import { NativeConnection, Worker } from '@temporalio/worker'
 import { Activities, LocalActivities } from './temporal'
 import type { Temporal } from '../util/types'
@@ -43,7 +48,7 @@ export default class LotusBot {
       if (apiKey) {
         this.platforms.push([name, apiKey])
         this.bots[name] = new Platforms[name](this.handler)
-        this.bots[name].on('temporalCommand', this.temporal.signalWorkflow)
+        this.bots[name].on('temporalCommand', this.temporal.sendCommand)
       }
     }
   }
@@ -213,7 +218,7 @@ export default class LotusBot {
      * @param param0
      * @returns
      */
-    signalWorkflow: async ({ command, data }: Temporal.Command) => {
+    sendCommand: async ({ command, data }: Temporal.Command) => {
       const workflowType = config.temporal.command.workflow.type
       const workflowId = config.temporal.command.workflow.id
       const signal = config.temporal.command.workflow.signal
@@ -226,7 +231,7 @@ export default class LotusBot {
           signalArgs: [{ command, data }],
         })
       } catch (e) {
-        this._warn(MAIN, `Temporal: signalWorkflow: ${e.message}`)
+        this._warn(MAIN, `Temporal: sendCommand: ${e.message}`)
       }
     },
   }
@@ -281,6 +286,34 @@ export default class LotusBot {
         workflowId,
         searchAttributes,
         args,
+      })
+    },
+    /**
+     *
+     * @param param0
+     * @returns
+     */
+    signalWithStart: async ({
+      taskQueue,
+      workflowType,
+      workflowId,
+      args,
+      signal,
+      signalArgs,
+    }: {
+      taskQueue: string
+      workflowType: string
+      workflowId: string
+      args?: unknown[]
+      signal: string | SignalDefinition
+      signalArgs?: unknown[]
+    }) => {
+      return await this.temporalClient.workflow.signalWithStart(workflowType, {
+        taskQueue,
+        workflowId,
+        args,
+        signal,
+        signalArgs,
       })
     },
   }
