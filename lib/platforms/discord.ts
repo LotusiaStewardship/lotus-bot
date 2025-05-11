@@ -30,10 +30,15 @@ type Command = {
 }
 
 type CommandOption = {
-  type: number
+  type: CommandType
   name: string
   description: string
   required: boolean
+}
+enum CommandType {
+  User = 6,
+  String = 3,
+  Number = 10,
 }
 export declare interface IDiscord extends Platform {
   on(
@@ -83,13 +88,13 @@ export class Discord extends EventEmitter implements IDiscord {
         description: 'Give XPI to another user.',
         options: [
           {
-            type: 6,
+            type: CommandType.User,
             name: 'to',
             description: 'User to give XPI to',
             required: true,
           },
           {
-            type: 10,
+            type: CommandType.Number,
             name: 'amount',
             description: 'Amount of XPI to give.',
             required: true,
@@ -110,13 +115,13 @@ export class Discord extends EventEmitter implements IDiscord {
         description: 'Withdraw XPI from your wallet in the bot.',
         options: [
           {
-            type: 10,
+            type: CommandType.Number,
             name: 'amount',
             description: 'Amount of XPI to withdraw.',
             required: true,
           },
           {
-            type: 3,
+            type: CommandType.String,
             name: 'address',
             description: 'XPI Address for your external wallet.',
             required: true,
@@ -128,7 +133,7 @@ export class Discord extends EventEmitter implements IDiscord {
         description: 'Link your account to another Discord/platform account',
         options: [
           {
-            type: 3,
+            type: CommandType.String,
             name: 'secret',
             description: 'Optional - Secret provided from another account',
             required: false,
