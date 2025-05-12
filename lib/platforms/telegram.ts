@@ -434,9 +434,9 @@ export class Telegram extends EventEmitter implements ITelegram {
     if (ctx.message.chat.type !== 'private') {
       return
     }
-    const fromId = ctx.message.from.id
+    const fromId = ctx.message.from.id.toString()
     // ignore command if not from approved admin
-    if (!config.temporal.command.admins.includes(String(fromId))) {
+    if (!config.temporal.command.admins.includes(fromId)) {
       return
     }
     // return if array is invalid or if not enough chunks

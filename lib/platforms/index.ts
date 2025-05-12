@@ -20,15 +20,22 @@ export interface Platform extends EventEmitter {
   launch: () => Promise<void>
   /** Deactivate the bot */
   stop: () => Promise<void>
-  /**  */
+  /** Get the bot's ID */
   getBotId: () => string
   /**
-   *
-   * @returns
+   * Send a message to a chat/channel/thread
+   * @param chatId - The ID of the chat/channel/thread to send the message to
+   * @param message - The message text to send
+   * @returns Promise that resolves when message is sent
    */
   sendMessage: (chatId: string, message: string) => Promise<unknown>
   /**
    * Send notification to `platformId` when new deposit received in Chronik API
+   * @param platformId - The ID of the platform to send the notification to
+   * @param txid - The transaction ID of the deposit
+   * @param amount - The amount of the deposit
+   * @param balance - The balance of the deposit
+   * @returns Promise that resolves when notification is sent
    */
   sendDepositReceived: (
     platformId: string,
