@@ -253,15 +253,12 @@ export default class LotusBot {
       return await this.bots[platform].sendMessage(chatId, message)
     },
     /**
-     * Activity to send `sats` amount of Lotus to the specified `scriptPayload`
-     * @param param0
-     * @returns {Promise<string>} Transaction ID returned from Chronik `broadcastTx`
+     * Activity to send outbound `Lotus` transaction to the specified `outputs`
+     * @param outputs - Array of outputs to send
+     * @returns Transaction ID of the broadcasted transaction
      */
-    sendLotus: async ({
-      scriptPayload,
-      sats,
-    }: Temporal.SendLotusInput): Promise<string> => {
-      return await this.handler.temporal.sendLotus({ scriptPayload, sats })
+    sendLotus: async (outputs: Temporal.SendLotusInput[]): Promise<string> => {
+      return await this.handler.temporal.sendLotus(outputs)
     },
     /**
      *

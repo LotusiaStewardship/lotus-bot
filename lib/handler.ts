@@ -5,6 +5,7 @@ import { Wallet } from '../util/types'
 import { WalletManager } from './wallet'
 import { Database } from './database'
 import { EventEmitter } from 'events'
+import { asyncCollection } from '../util/functions'
 
 // Constants used for logging purposes
 const WALLET = 'walletmanager'
@@ -307,19 +308,16 @@ export class Handler extends EventEmitter {
    */
   temporal = {
     /**
-     *
-     * @param param0
-     * @returns
+     * Send Lotus transaction to the specified `outputs`
+     * @param outputs - Array of outputs to send, spliced to 99 outputs max
+     * @returns Transaction ID of the broadcasted transaction
      */
-    sendLotus: async ({
-      scriptPayload,
-      sats,
-    }: {
-      scriptPayload: string
-      sats: string
-    }): Promise<string> => {
-      const outAddress =
-        WalletManager.toXAddressFromScriptPayload(scriptPayload)
+    sendLotus: async (
+      outputs: {
+        scriptPayload: string
+        sats: string
+      }[],
+    ): Promise<string> => {
       const changeAddress = this.wallet.getXAddress(BOT.USER.userId)
       const signingKey = this.wallet.getSigningKey(BOT.USER.userId)
       const utxos = (
@@ -328,16 +326,14 @@ export class Handler extends EventEmitter {
           this.wallet.getScriptHex(BOT.USER.userId),
         )
       ).map(utxo => this.wallet.toParsedUtxo(utxo))
-      const tx = WalletManager.craftSendLotusTransaction({
-        outAddress,
-        outValue: sats,
+      const tx = await WalletManager.craftSendLotusTransaction({
+        outputs: asyncCollection(outputs), // 99 outputs + 1 change output = 100 outputs max
         changeAddress,
         utxos,
         inAddress: changeAddress,
         signingKey,
       })
       return await this.wallet.broadcastTx(tx)
-      //return tx.txid
     },
   }
 
