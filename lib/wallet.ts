@@ -439,6 +439,7 @@ export class WalletManager extends EventEmitter {
    */
   static craftSendLotusTransaction = async ({
     outputs,
+    totalOutputValue,
     changeAddress,
     utxos,
     inAddress,
@@ -448,6 +449,7 @@ export class WalletManager extends EventEmitter {
       scriptPayload: string
       sats: string
     }>
+    totalOutputValue: string
     changeAddress: string
     utxos: Wallet.ParsedUtxo[]
     inAddress: string
@@ -472,10 +474,10 @@ export class WalletManager extends EventEmitter {
           script: inScript,
         }),
       )
-      // TODO: add check for input amount
-      /* if (tx.inputAmount > Number(outValue)) {
+      // if input amount is greater than total output value, break
+      if (tx.inputAmount > Number(totalOutputValue)) {
         break
-      } */
+      }
     }
     // add tx outputs
     for await (const output of outputs) {
@@ -491,7 +493,7 @@ export class WalletManager extends EventEmitter {
         }),
       )
     }
-    // sign and deliver
+    // sign and return tx
     tx.sign(signingKey)
     return tx
   }
