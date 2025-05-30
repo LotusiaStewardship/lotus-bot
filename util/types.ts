@@ -7,12 +7,13 @@ export namespace Temporal {
     command: string
     data: string[]
   }
+  /** Input received from Temporal Workflow, as a single message */
   export type SendMessageInput = {
     platform: PlatformName
     chatId: string
     message: string
   }
-
+  /** Input received from Temporal Workflow, as a single output for a sendLotus activity */
   export type SendLotusInput = {
     scriptPayload: string
     sats: string

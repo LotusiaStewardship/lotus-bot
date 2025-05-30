@@ -437,21 +437,22 @@ export class WalletManager extends EventEmitter {
    * @param param0
    * @returns {Transaction}
    */
-  static craftSendLotusTransaction = ({
-    outAddress,
-    outValue,
+  static craftSendLotusTransaction = async ({
+    outputs,
     changeAddress,
     utxos,
     inAddress,
     signingKey,
   }: {
-    outAddress: string
-    outValue: string
+    outputs: AsyncIterable<{
+      scriptPayload: string
+      sats: string
+    }>
     changeAddress: string
     utxos: Wallet.ParsedUtxo[]
     inAddress: string
     signingKey: PrivateKey
-  }): Transaction => {
+  }): Promise<Transaction> => {
     // set up transaction with base parameters
     const tx = new Transaction()
     tx.feePerByte(config.wallet.tx.feeRate)
@@ -471,17 +472,25 @@ export class WalletManager extends EventEmitter {
           script: inScript,
         }),
       )
-      if (tx.inputAmount > Number(outValue)) {
+      // TODO: add check for input amount
+      /* if (tx.inputAmount > Number(outValue)) {
         break
-      }
+      } */
     }
-    // add output address
-    tx.addOutput(
-      new Transaction.Output({
-        satoshis: Number(outValue),
-        script: Script.fromAddress(outAddress),
-      }),
-    )
+    // add tx outputs
+    for await (const output of outputs) {
+      tx.addOutput(
+        new Transaction.Output({
+          satoshis: Number(output.sats),
+          script: Script.fromAddress(
+            Address.fromPublicKeyHash(
+              Buffer.from(output.scriptPayload, 'hex'),
+              Networks.livenet,
+            ),
+          ),
+        }),
+      )
+    }
     // sign and deliver
     tx.sign(signingKey)
     return tx
