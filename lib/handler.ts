@@ -325,9 +325,17 @@ export class Handler extends EventEmitter {
           'p2pkh',
           this.wallet.getScriptHex(BOT.USER.userId),
         )
-      ).map(utxo => this.wallet.toParsedUtxo(utxo))
+      )
+        .map(utxo => this.wallet.toParsedUtxo(utxo))
+        // filter out utxos with less than 10_000 XPI
+        .filter(({ value }) => Number(value) >= 10_000_000000)
+        // sort highest to lowest
+        .sort((a, b) => Number(b.value) - Number(a.value))
       const tx = await WalletManager.craftSendLotusTransaction({
         outputs: asyncCollection(outputs), // 99 outputs + 1 change output = 100 outputs max
+        totalOutputValue: outputs
+          .reduce((acc, { sats }) => acc + Number(sats), 0)
+          .toString(),
         changeAddress,
         utxos,
         inAddress: changeAddress,
