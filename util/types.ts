@@ -62,4 +62,9 @@ export namespace Wallet {
   export type AccountUtxo = ParsedUtxo & {
     userId: string
   }
+
+  export type TxBroadcastResult = {
+    txid: string
+    amount: string
+  }
 }

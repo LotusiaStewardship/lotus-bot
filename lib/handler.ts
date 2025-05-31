@@ -26,15 +26,15 @@ export class Handler extends EventEmitter {
     super()
     this.prisma = prisma
     this.wallet = wallet
-    // Set up event handlers once we are ready
-    this.wallet.on('AddedToMempool', this.walletDepositReceived)
-    this.wallet.on('BlockConnected', this.walletDepositReceived)
+    // Add the walletDepositReceived Chronik event callback to the WalletManager
+    // This is set as the callback for the 'AddedToMempool' and 'BlockConnected' events
+    // `WalletManager` registers this callback when it is instantiated
+    this.wallet.walletDepositReceived = this.walletDepositReceived
   }
   /** Informational and error logging */
   log = (module: string, message: string) =>
     console.log(`${module.toUpperCase()}: ${message}`)
   /* Called by any bot module that runs into unrecoverable error */
-  // @ts-ignore
   shutdown = () => this.emit('Shutdown')
   /** Make sure we process deposits we received while offline */
   init = async () => {
@@ -71,46 +71,65 @@ export class Handler extends EventEmitter {
         )
       })
       for (const deposit of newDeposits) {
-        await this._saveDeposit(deposit)
+        await this.saveDeposit(deposit)
       }
     } catch (e: any) {
       throw new Error(`init: ${e.message}`)
     }
   }
-  /**  */
+  /**
+   * Handle deposit received event from `WalletManager`
+   * @param utxo - The deposit UTXO
+   */
   walletDepositReceived = async (utxo: Wallet.AccountUtxo) => {
     try {
-      await this._saveDeposit(utxo)
+      await this.saveDeposit(utxo)
     } catch (e: any) {
-      this.log(MAIN, `walletsUtxoAddedToMempool: FATAL: ${e.message}`)
+      this.log(MAIN, `walletDepositReceived: FATAL: ${e.message}`)
       this.shutdown()
     }
   }
-
+  /**
+   * Process the `balance` command
+   * @param platform - The platform name
+   * @param platformId - The platform ID
+   * @returns The balance in XPI
+   */
   processBalanceCommand = async (
     platform: PlatformName,
     platformId: string,
   ): Promise<string> => {
     const msg = `${platformId}: balance`
     this.log(platform, `${msg}: command received`)
-    const { accountId } = await this._getIds(platform, platformId)
+    const { accountId } = await this.validateAndGetIds(platform, platformId)
     const balance = await this.wallet.getAccountBalance(accountId)
     return Util.toXPI(balance)
   }
-
+  /**
+   * Process the `deposit` command
+   * @param platform - The platform name
+   * @param platformId - The platform ID
+   * @returns The deposit address
+   */
   processDepositCommand = async (
     platform: PlatformName,
     platformId: string,
   ) => {
     const msg = `${platformId}: deposit`
     this.log(platform, `${msg}: command received`)
-    const { userId } = await this._getIds(platform, platformId)
+    const { userId } = await this.validateAndGetIds(platform, platformId)
     return this.wallet.getXAddress(userId)
   }
   /**
-   *
-   * @param param0
-   * @returns
+   * Process the `give` command
+   * @param platform - The platform name
+   * @param chatId - The chat ID
+   * @param fromId - The from ID
+   * @param fromUsername - The from username
+   * @param toId - The to ID
+   * @param toUsername - The to username
+   * @param value - The value
+   * @param isBotDonation - Whether the `fromId` is giving to the bot
    */
   processGiveCommand = async ({
     platform,
@@ -131,30 +150,28 @@ export class Handler extends EventEmitter {
     value: string
     isBotDonation: boolean
   }) => {
-    const sats = Util.toSats(value)
-    const msg = `chatId ${chatId}: fromId ${fromId}: give: ${fromUsername} -> ${toId} (${toUsername}): ${sats} sats`
+    const outSats = Util.toSats(value)
+    const msg = `chatId ${chatId}: fromId ${fromId}: give: ${fromUsername} -> ${toId} (${toUsername}): ${outSats} sats`
     this.log(platform, `${msg}: command received`)
-    if (sats < MIN_OUTPUT_AMOUNT) {
+    if (outSats < MIN_OUTPUT_AMOUNT) {
       throw new Error(`${msg}: ERROR: minimum required: ${MIN_OUTPUT_AMOUNT}`)
     }
     // Create account for fromId if not exist
-    const { accountId: fromAccountId, userId: fromUserId } = await this._getIds(
-      platform,
-      fromId,
-    )
+    const { accountId: fromAccountId, userId: fromUserId } =
+      await this.validateAndGetIds(platform, fromId)
     const balance = await this.wallet.getAccountBalance(fromAccountId)
-    if (sats > balance) {
+    if (outSats > balance) {
       throw new Error(`${msg}: ERROR: insufficient balance: ${balance}`)
     }
     // If this is donation to bot, pull that wallet key without db query
     const toUserId = isBotDonation
       ? BOT.USER.userId
-      : (await this._getIds(platform, toId)).userId
+      : (await this.validateAndGetIds(platform, toId)).userId
     // Give successful; broadcast tx and save to db
     const tx = await this.wallet.genTx('give', {
       fromAccountId,
       toUserId,
-      sats,
+      outSats,
     })
     // save give to database before broadcasting
     try {
@@ -164,7 +181,7 @@ export class Handler extends EventEmitter {
         timestamp: new Date(),
         fromId: fromUserId,
         toId: toUserId,
-        value: sats.toString(),
+        value: outSats.toString(),
       })
     } catch (e: any) {
       throw new Error(`${msg}: ERROR: failed to save give: ${e.message}`)
@@ -184,28 +201,32 @@ export class Handler extends EventEmitter {
       amount: Util.toXPI(tx.outputs[0].satoshis),
     }
   }
-
+  /**
+   * Process the `withdraw` command
+   * @param platform - The platform name
+   * @param platformId - The platform ID
+   * @param outAmount - The amount to withdraw
+   * @param outAddress - The address to withdraw to
+   * @returns The transaction ID and amount, or error message
+   */
   processWithdrawCommand = async (
     platform: PlatformName,
     platformId: string,
     outAmount: string,
     outAddress: string,
-  ): Promise<
-    | {
-        txid: string
-        amount: string
-      }
-    | string
-  > => {
+  ): Promise<Wallet.TxBroadcastResult | string> => {
     const msg = `${platformId}: withdraw: ${outAmount} -> ${outAddress}`
     this.log(platform, `${msg}: command received`)
-    const sats = Util.toSats(outAmount)
+    const outSats = Util.toSats(outAmount)
     if (!WalletManager.isValidAddress(outAddress)) {
       return `invalid address: \`${outAddress}\``
-    } else if (sats < MIN_OUTPUT_AMOUNT) {
+    } else if (outSats < MIN_OUTPUT_AMOUNT) {
       return `withdraw minimum is ${Util.toXPI(MIN_OUTPUT_AMOUNT)} XPI`
     }
-    const { accountId, userId } = await this._getIds(platform, platformId)
+    const { accountId, userId } = await this.validateAndGetIds(
+      platform,
+      platformId,
+    )
     // Get the user's XAddress and check against outAddress
     const addresses = this.wallet.getXAddresses(accountId)
     if (addresses.includes(outAddress)) {
@@ -213,20 +234,20 @@ export class Handler extends EventEmitter {
     }
     // Get the user's balance and check against outAmount
     const balance = await this.wallet.getAccountBalance(accountId)
-    if (sats > balance) {
-      return `insufficient balance: ${sats} > ${balance}`
+    if (outSats > balance) {
+      return `insufficient balance: ${outSats} > ${balance}`
     }
     // Generate withdrawal tx
     const tx = await this.wallet.genTx('withdraw', {
       fromAccountId: accountId,
       outAddress,
-      sats,
+      outSats,
     })
     // Save the withdrawal to the database before broadcasting
     try {
       await this.prisma.saveWithdrawal({
         txid: tx.txid,
-        value: sats.toString(),
+        value: outSats.toString(),
         timestamp: new Date(),
         userId,
       })
@@ -251,20 +272,24 @@ export class Handler extends EventEmitter {
       throw new Error(`withdrawal broadcast failed: ${e.message}`)
     }
   }
-
+  /**
+   * Process the `link` command
+   * @param platform - The platform name
+   * @param platformId - The platform ID
+   * @param secret - The secret
+   * @returns The secret or error message
+   */
   processLinkCommand = async (
     platform: PlatformName,
     platformId: string,
     secret: string | undefined,
-  ): Promise<
-    | {
-        secret: string
-      }
-    | string
-  > => {
+  ): Promise<{ secret: string | undefined } | string> => {
     const msg = `${platformId}: link: ${secret ? '<redacted>' : 'initiate'}`
     this.log(platform, `${msg}: command received`)
-    const { accountId, userId } = await this._getIds(platform, platformId)
+    const { accountId, userId } = await this.validateAndGetIds(
+      platform,
+      platformId,
+    )
     switch (typeof secret) {
       /** User provided secret to link account */
       case 'string':
@@ -292,11 +317,16 @@ export class Handler extends EventEmitter {
         return { secret: userSecret }
     }
   }
-
+  /**
+   * Process the `backup` command
+   * @param platform - The platform name
+   * @param platformId - The platform ID
+   * @returns The mnemonic
+   */
   processBackupCommand = async (platform: PlatformName, platformId: string) => {
     const msg = `${platformId}: backup`
     this.log(platform, `${msg}: command received`)
-    const { userId } = await this._getIds(platform, platformId)
+    const { userId } = await this.validateAndGetIds(platform, platformId)
     const mnemonic = await this.prisma.getUserMnemonic(userId)
     return mnemonic
   }
@@ -318,15 +348,10 @@ export class Handler extends EventEmitter {
         sats: string
       }[],
     ): Promise<string> => {
-      const changeAddress = this.wallet.getXAddress(BOT.USER.userId)
-      const signingKey = this.wallet.getSigningKey(BOT.USER.userId)
-      const utxos = (
-        await this.wallet.fetchUtxos(
-          'p2pkh',
-          this.wallet.getScriptHex(BOT.USER.userId),
-        )
-      )
-        .map(utxo => this.wallet.toParsedUtxo(utxo))
+      const walletKey = this.wallet.getWalletKey(BOT.USER.userId)
+      const changeAddress = walletKey.address.toXAddress()
+      const signingKey = walletKey.signingKey
+      const utxos = walletKey.utxos
         // filter out utxos with less than 10_000 XPI
         .filter(({ value }) => Number(value) >= 10_000_000000)
         // sort highest to lowest
@@ -344,20 +369,22 @@ export class Handler extends EventEmitter {
       return await this.wallet.broadcastTx(tx)
     },
   }
-
   /**
-   * Checks if `platformId` of `platform` is valid.
-   * If not, creates it; if so, gathers data from the database
+   * Validate the `platformId` and `platform`
+   * If the account does not exist, it is first created, and the IDs are returned
    * @returns `accountId` and `userId`
    */
-  private _getIds = async (platform: PlatformName, platformId: string) => {
+  private validateAndGetIds = async (
+    platform: PlatformName,
+    platformId: string,
+  ) => {
     try {
       const isValidUser = await this.prisma.isValidUser(platform, platformId)
       return !isValidUser
-        ? await this._saveAccount(platform, platformId)
+        ? await this.saveAccount(platform, platformId)
         : await this.prisma.getIds(platform, platformId)
     } catch (e: any) {
-      throw new Error(`_getIds: ${e.message}`)
+      throw new Error(`handler.validateAndGetIds: ${e.message}`)
     }
   }
   /**
@@ -365,7 +392,7 @@ export class Handler extends EventEmitter {
    * - Load new account `WalletKey` into WalletManager
    * - Return `accountId` and `userId` from saved account
    */
-  private _saveAccount = async (platform: PlatformName, platformId: string) => {
+  private saveAccount = async (platform: PlatformName, platformId: string) => {
     try {
       const accountId = Util.newUUID()
       const userId = Util.newUUID()
@@ -390,8 +417,12 @@ export class Handler extends EventEmitter {
       throw new Error(`_saveAccount: ${e.message}`)
     }
   }
-
-  private _saveDeposit = async (utxo: Wallet.AccountUtxo) => {
+  /**
+   * Save a deposit to the database
+   * @param utxo - The deposit to save
+   * @returns {Promise<void>}
+   */
+  private saveDeposit = async (utxo: Wallet.AccountUtxo): Promise<void> => {
     try {
       if (
         // don't notify deposit on give txs
@@ -418,16 +449,19 @@ export class Handler extends EventEmitter {
         const { accountId } = deposit.user
         const balance = await this.wallet.getAccountBalance(accountId)
         // @ts-ignore
-        return this.emit('DepositSaved', {
+        this.emit('DepositSaved', {
           platform: platformName as PlatformName,
           platformId: user.id,
           txid: utxo.txid,
           amount: Util.toXPI(utxo.value),
           balance: Util.toXPI(balance),
+          isCoinbase: utxo.isCoinbase,
+          blockHeight: utxo.blockHeight,
         })
+        return
       }
     } catch (e: any) {
-      throw new Error(`_saveDeposit: ${e.message}`)
+      throw new Error(`handler.saveDeposit: ${e.message}`)
     }
   }
 }

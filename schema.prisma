@@ -18,6 +18,8 @@ model Deposit {
   value String
   userId String
   timestamp DateTime
+  blockHeight Int?
+  isCoinbase Boolean @default(false)
   user User @relation(fields: [userId], references: [id])
   @@unique([txid, outIdx])
   @@index([txid, userId])

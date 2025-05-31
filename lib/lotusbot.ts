@@ -33,7 +33,10 @@ export default class LotusBot {
   private temporalClient!: Client
   /** Hold enabled platforms */
   private platforms: [name: PlatformName, apiKey: string][] = []
-
+  /**
+   * Initialize all submodules
+   * Set up required event handlers and gather enabled platforms
+   */
   constructor() {
     this.prisma = new Database()
     this.wallet = new WalletManager()
@@ -41,7 +44,7 @@ export default class LotusBot {
     // @ts-ignore
     this.handler.on('Shutdown', this._shutdown)
     // @ts-ignore
-    this.handler.on('DepositSaved', this._depositSaved)
+    this.handler.on('DepositSaved', this.handleDepositSaved)
     /** Gather enabled platforms */
     for (const [platform, apiKey] of Object.entries(config.apiKeys)) {
       const name = platform as PlatformName
@@ -182,8 +185,15 @@ export default class LotusBot {
     }
     process.exit(1)
   }
-
-  private _depositSaved = async ({
+  /**
+   * Handle deposit saved event by notifying the user via their platform
+   * @param platform - The platform name (telegram, discord, twitter)
+   * @param platformId - The user's platform ID
+   * @param txid - The transaction ID of the deposit
+   * @param amount - The amount deposited in satoshis
+   * @param balance - The user's new balance after deposit
+   */
+  private handleDepositSaved = async ({
     platform,
     platformId,
     txid,
@@ -209,14 +219,21 @@ export default class LotusBot {
         `${platformId}: user notified of deposit received: ${txid}`,
       )
     } catch (e: any) {
-      this._logPlatformNotifyError(platform, '_depositSaved', e.message)
+      this._logPlatformNotifyError(
+        platform,
+        'lotusbot.handleDepositSaved',
+        e.message,
+      )
     }
   }
+  /**
+   * Temporal-native activities (must be arrow functions)
+   */
   temporal = {
     /**
-     *
-     * @param param0
-     * @returns
+     * Send command to Temporal workflow
+     * @param command - The command to send
+     * @param data - The data to send with the command
      */
     sendCommand: async ({ command, data }: Temporal.Command) => {
       const workflowType = config.temporal.command.workflow.type
