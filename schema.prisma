@@ -12,13 +12,14 @@ datasource db {
 }
 
 model Deposit {
-  txid String @unique
+  txid String
   outIdx Int
   // Deposit amount, in satoshis
   value String
   userId String
   timestamp DateTime
   user User @relation(fields: [userId], references: [id])
+  @@unique([txid, outIdx])
   @@index([txid, userId])
 }
 
