@@ -394,11 +394,15 @@ export class Handler extends EventEmitter {
   private _saveDeposit = async (utxo: Wallet.AccountUtxo) => {
     try {
       if (
+        // don't notify deposit on give txs
         (await this.prisma.isGiveTx(utxo.txid)) ||
         // Accept a withdrawl as a deposit if the outIdx is not the change Idx
         // Fixes https://github.com/givelotus/lotus-bot/issues/48
         ((await this.prisma.isWithdrawTx(utxo.txid)) &&
-          utxo.outIdx == WalletManager.WITHDRAW_CHANGE_OUTIDX)
+          utxo.outIdx == WalletManager.WITHDRAW_CHANGE_OUTIDX) ||
+        // ignore bot deposits
+        // this does not affect notifications when giving to the bot
+        utxo.userId == BOT.USER.userId
       ) {
         return
       }

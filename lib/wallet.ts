@@ -358,6 +358,10 @@ export class WalletManager extends EventEmitter {
             break
           }
           this.keys[userId].utxos.push(parsedUtxo)
+          // do not emit change outputs as deposits
+          if (WalletManager.isChangeOutput(i, tx.outputs)) {
+            return
+          }
           this.emit(
             msg.type,
             { ...parsedUtxo, userId } as Wallet.AccountUtxo,
@@ -498,6 +502,14 @@ export class WalletManager extends EventEmitter {
     return tx
   }
   static isValidAddress = (address: string) => Address.isValid(address)
+  /**
+   * Assumes that the last output is the change output. Used in Chronik WS message handling.
+   * @param outIdx - the index of the output to check
+   * @param outputs - the outputs of the transaction, in Chronik format
+   * @returns true if the output is the change output, false otherwise.
+   */
+  static isChangeOutput = (outIdx: number, outputs: Tx['outputs']) =>
+    outIdx == outputs.length - 1
   static WITHDRAW_CHANGE_OUTIDX = 1
   static GIVE_CHANGE_OUTIDX = 1
 }
