@@ -344,10 +344,6 @@ export class WalletManager extends EventEmitter {
           if (!userId) {
             continue
           }
-          // ignore change outputs
-          if (WalletManager.isChangeOutput(i, tx.outputs)) {
-            continue
-          }
           // found our userId/key; save utxo
           const parsedUtxo = {
             txid: tx.txid,
@@ -362,6 +358,10 @@ export class WalletManager extends EventEmitter {
             break
           }
           this.keys[userId].utxos.push(parsedUtxo)
+          // do not emit change outputs as deposits
+          if (WalletManager.isChangeOutput(i, tx.outputs)) {
+            return
+          }
           this.emit(
             msg.type,
             { ...parsedUtxo, userId } as Wallet.AccountUtxo,
