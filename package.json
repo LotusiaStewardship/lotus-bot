@@ -1,6 +1,6 @@
 {
   "name": "lotus-bot",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Chat bot for social media to use for giving Lotus XPI to other people",
   "main": "index.js",
   "scripts": {
