@@ -12,37 +12,242 @@ import {
   OutPoint,
   ScriptType,
   SubscribeMsg,
-  Tx,
+  Tx as ChronikTx,
   Utxo,
+  UtxoState,
   WsEndpoint,
 } from 'chronik-client'
 import config from '../config'
 import { WALLET } from '../util/constants'
-import { EventEmitter } from 'node:events'
 import type { Wallet } from '../util/types'
-
-export interface WalletManager {
-  /** Emitted when a `WalletKey` receives an output from a standard transaction */
-  on(
-    event: 'AddedToMempool' | 'BlockConnected',
-    callback: (utxo: Wallet.AccountUtxo) => void,
-  ): this
+import { asyncCollection } from '../util/functions'
+/** A map of `WalletKey` instances, keyed by `userId` */
+type WalletMap = Map<string, WalletKey>
+/**
+ * Static methods for the `WalletKey` and `WalletManager` classes
+ */
+export class WalletTools {
+  /**
+   * Get the Bitcore `Script` for the provided `Address`
+   * @param address - The `Address` to get the script for, in string or `Address` format
+   * @returns The Bitcore `Script`
+   */
+  static getScriptFromAddress = (address: string | Address): Script => {
+    try {
+      return Script.fromAddress(address)
+    } catch (e: any) {
+      throw new Error(`getScriptFromAddress: ${e.message}`)
+    }
+  }
+  /**
+   * Get the Bitcore `PrivateKey` from the provided `HDPrivateKey`
+   * @param hdPrivKey - The `HDPrivateKey` from which to derive the `PrivateKey`
+   * @returns The Bitcore `PrivateKey`
+   */
+  static getDerivedSigningKey = (hdPrivKey: HDPrivateKey): PrivateKey => {
+    try {
+      return hdPrivKey
+        .deriveChild(WALLET.PURPOSE, true)
+        .deriveChild(WALLET.COINTYPE, true)
+        .deriveChild(0, true)
+        .deriveChild(0)
+        .deriveChild(0).privateKey
+    } catch (e: any) {
+      throw new Error(`getDerivedPrivKey: ${e.message}`)
+    }
+  }
+  /**
+   * Get the Bitcore `Address` for the provided `PrivateKey`
+   * @param signingKey - The `PrivateKey` to get the address for
+   * @returns The Bitcore `Address`
+   */
+  static getAddressFromSigningKey = (signingKey: PrivateKey): Address => {
+    try {
+      return signingKey.toAddress()
+    } catch (e: any) {
+      throw new Error(`getAddressFromSigningKey: ${e.message}`)
+    }
+  }
+  /**
+   * Get the Chronik script type for the provided `Address`
+   * @param address - The `Address` to get the script type for
+   * @returns The Chronik script type
+   */
+  static getChronikScriptType = (address: string | Address): ScriptType => {
+    // Convert string to Address if needed
+    address =
+      typeof address === 'string' ? Address.fromString(address) : address
+    switch (true) {
+      case address.isPayToPublicKeyHash():
+        return 'p2pkh'
+      case address.isPayToScriptHash():
+        return 'p2sh'
+      default:
+        return 'other'
+    }
+  }
+  /**
+   * Convert a Chronik UTXO to a Bitcore-compatible `ParsedUtxo`
+   * @param utxo - The Chronik UTXO to convert
+   * @returns The Bitcore-compatible `ParsedUtxo`
+   */
+  static toParsedUtxo = (utxo: Utxo) => {
+    const { txid, outIdx } = utxo.outpoint
+    const { value } = utxo
+    return { txid, outIdx, value }
+  }
+  /** Create Bitcore-compatible P2PKH `Transaction.Input` */
+  static toPKHInput = (utxo: Wallet.ParsedUtxo, script: Script) => {
+    try {
+      return new Transaction.Input.PublicKeyHash({
+        prevTxId: utxo.txid,
+        outputIndex: utxo.outIdx,
+        output: this.toOutput(Number(utxo.value), script),
+        script,
+      })
+    } catch (e: any) {
+      throw new Error(`_toPKHInput: ${e.message}`)
+    }
+  }
+  /** Create a Bitcore-compatible `Transaction.Output` */
+  static toOutput = (satoshis: number, script: Script) => {
+    try {
+      return new Transaction.Output({ satoshis, script })
+    } catch (e: any) {
+      throw new Error(`_toOutput: ${e.message}`)
+    }
+  }
 }
-
-export class WalletManager extends EventEmitter {
-  // Chronik properties
+/**
+ * A `WalletKey` is a single Bitcore `PrivateKey` with associated `Address`,
+ * `Script`, and `ScriptType`. Each platform user has their own `WalletKey`.
+ */
+class WalletKey {
+  /** The unique identifier for this wallet account */
+  public accountId: string
+  /** The unique identifier for the user associated with this wallet */
+  public userId: string
+  /** This Chronik client instance is only for managing UTXOs in this `WalletKey` */
+  public chronik: ChronikClient
+  /** This Chronik WS endpoint is only for managing UTXOs in this `WalletKey` */
+  public chronikWs: WsEndpoint
+  /** The private key used for signing transactions */
+  public signingKey: PrivateKey
+  /** The public address derived from the signing key */
+  public address: Address
+  /** The locking script that controls spending from this address */
+  public script: Script
+  /** The type of script (e.g. p2pkh) as used by Chronik */
+  public scriptType: ScriptType
+  /** The full P2PKH script as a hex string */
+  public scriptHex: string
+  /** The hex-encoded public key hash used in the script */
+  public scriptPayload: string
+  /** The UTXO cache for this `WalletKey` */
+  public utxos: Wallet.ParsedUtxo[] = []
+  /**
+   * Creates a new `WalletKey` instance
+   * @param accountId - The unique identifier for this wallet account
+   * @param hdPrivKey - The `HDPrivateKey` used to derive the signing key
+   */
+  constructor(
+    accountId: string,
+    userId: string,
+    hdPrivKey: HDPrivateKey,
+    chronik: ChronikClient,
+    chronikWs: WsEndpoint,
+  ) {
+    this.accountId = accountId
+    this.userId = userId
+    this.signingKey = WalletTools.getDerivedSigningKey(hdPrivKey)
+    this.address = WalletTools.getAddressFromSigningKey(this.signingKey)
+    this.script = WalletTools.getScriptFromAddress(this.address)
+    this.scriptType = WalletTools.getChronikScriptType(this.address)
+    this.scriptHex = this.script.toHex()
+    this.scriptPayload = this.script.getData().toString('hex')
+    this.chronik = chronik
+    this.chronikWs = chronikWs
+  }
+  /** Initialize the Chronik client and WS endpoint */
+  public async init() {
+    const utxos = await this.fetchUtxos()
+    this.utxos = utxos.map(utxo => WalletTools.toParsedUtxo(utxo))
+  }
+  /** Get the balance of the `WalletKey` by adding the value of all cached, in-memory UTXOs */
+  public async getBalance() {
+    this.utxos = await this.validateUtxos(this.utxos ?? [])
+    return this.utxos.reduce((balance, utxo) => balance + Number(utxo.value), 0)
+  }
+  /**
+   * Fetch UTXOs from Chronik API for `WalletKey` script data
+   * @returns The UTXOs from Chronik
+   */
+  async fetchUtxos(): Promise<Utxo[]> {
+    try {
+      const scriptEndpoint = this.chronik.script(
+        this.scriptType,
+        this.scriptPayload,
+      )
+      const [result] = await scriptEndpoint.utxos()
+      return result?.utxos || []
+    } catch (e: any) {
+      throw new Error(`fetchUtxos: ${e.message}`)
+    }
+  }
+  /**
+   * Validate UTXOs against Chronik API
+   * @param utxos - The UTXOs to validate
+   * @returns The validated UTXOs
+   */
+  private async validateUtxos(utxos: Wallet.ParsedUtxo[]) {
+    let result: UtxoState[]
+    try {
+      result = await this.chronik.validateUtxos(utxos)
+    } catch (e: any) {
+      throw new Error(`reconcileUtxos: ${e.message}`)
+    }
+    const validatedUtxos: Wallet.ParsedUtxo[] = []
+    let i = 0
+    for await (const utxo of asyncCollection(utxos)) {
+      switch (result[i].state) {
+        case 'UNSPENT':
+          validatedUtxos.push(utxo)
+      }
+      i++
+    }
+    return validatedUtxos
+  }
+}
+/**
+ * The `WalletManager` is responsible for managing all `WalletKey` instances
+ * and their associated UTXOs. It is also responsible for handling Chronik WS
+ * messages and updating the in-memory UTXO set.
+ *
+ * The `WalletManager` is responsible for:
+ * - Initializing Chronik WS
+ * - Loading user accounts (keys, UTXOs, WS subscription)
+ */
+export class WalletManager {
+  /** The Chronik client instance */
   private chronik: ChronikClient
+  /** The Chronik WS endpoint */
   private chronikWs: WsEndpoint
-  // Wallet properties
-  private keys: { [userId: string]: Wallet.Key } = {}
-  /** Array of associated `userId` strings for each `accountId` */
+  /** A map of `WalletKey` instances, keyed by `userId` */
+  private wallets: WalletMap = new Map()
+  /** A map of `accountId`s to `userId`s */
   private accounts: { [accountId: string]: string[] } = {}
-  /** Provides all off- and on-chain wallet functionality */
+  /** The callback to execute when a deposit is received */
+  public walletDepositReceived: (utxo: Wallet.AccountUtxo) => Promise<void>
+  /**
+   * @property chronik - The Chronik client instance
+   * @property chronikWs - The Chronik WS endpoint, hooked to the `chronikHandleWsMessage` method that is used by all `WalletKey` instances
+   */
   constructor() {
-    super()
     this.chronik = new ChronikClient(config.wallet.chronikUrl)
     this.chronikWs = this.chronik.ws({
-      onMessage: this._chronikHandleWsMessage,
+      onMessage: this.chronikHandleWsMessage,
+      onError: async e => await this.chronikWs.waitForOpen(),
+      onEnd: async e => await this.chronikWs.waitForOpen(),
     })
   }
   /**
@@ -67,48 +272,44 @@ export class WalletManager extends EventEmitter {
   }
   /** Unsubscribe from and close Chronik WS */
   closeWsEndpoint = () => {
-    for (const userId in this.keys) {
-      const { scriptType, scriptHex } = this.keys[userId]
-      this.chronikWs.unsubscribe(scriptType, scriptHex)
+    for (const [_userId, walletKey] of this.wallets) {
+      this.chronikWs.unsubscribe(walletKey.scriptType, walletKey.scriptPayload)
     }
     this.chronikWs.close()
   }
   /** Get the UTXOs for every `WalletKey` */
-  getUtxos = () => {
+  getUtxos = (): Wallet.AccountUtxo[] => {
     const utxos: Wallet.AccountUtxo[] = []
-    for (const userIds of Object.values(this.accounts)) {
-      userIds.forEach(userId =>
-        utxos.push(
-          ...this.keys[userId].utxos.map(utxo => {
-            return { ...utxo, userId }
-          }),
-        ),
+    for (const [userId, walletKey] of this.wallets) {
+      utxos.push(
+        ...walletKey.utxos.map(utxo => {
+          return { ...utxo, userId }
+        }),
       )
     }
     return utxos
   }
-  getUtxosByUserId = (userId: string) => this.keys[userId].utxos
+  /** Get the `WalletKey` for the provided `userId` */
+  getWalletKey = (userId: string) => this.wallets.get(userId)
+  /** Get the UTXOs for the provided `userId` */
+  getUtxosByUserId = (userId: string) => this.wallets.get(userId)?.utxos
   /** Get the UTXO balance for the provided `accountId` */
   getAccountBalance = async (accountId: string) => {
-    let sats = 0
-    try {
-      for (const userId of this.accounts[accountId]) {
-        // Validate the utxos of this WalletKey; discards invalid utxos
-        await this._reconcileUtxos(userId)
-        this.keys[userId].utxos.forEach(utxo => (sats += Number(utxo.value)))
-      }
-      return sats
-    } catch (e: any) {
-      throw new Error(`getAccountBalance: ${e.message}`)
+    let balance = 0
+    for (const userId of this.accounts[accountId]) {
+      const walletKey = this.wallets.get(userId)
+      balance += await walletKey.getBalance()
     }
+    return balance
   }
   /** Return the XAddress of the `WalletKey` of `userId` */
-  getXAddress = (userId: string) => this.keys[userId]?.address?.toXAddress()
-  getScriptHex = (userId: string) => this.keys[userId]?.scriptHex
-  getSigningKey = (userId: string) => this.keys[userId]?.signingKey
+  getXAddress = (userId: string) =>
+    this.wallets.get(userId)?.address?.toXAddress()
+  getScriptPayload = (userId: string) => this.wallets.get(userId)?.scriptPayload
+  getSigningKey = (userId: string) => this.wallets.get(userId)?.signingKey
   getXAddresses = (accountId: string) => {
     return this.accounts[accountId].map(userId => {
-      return this.keys[userId].address.toXAddress()
+      return this.wallets.get(userId)?.address.toXAddress()
     })
   }
   /**
@@ -126,25 +327,20 @@ export class WalletManager extends EventEmitter {
     hdPrivKey: HDPrivateKey
   }) => {
     try {
-      const signingKey = this._getDerivedSigningKey(hdPrivKey)
-      const address = this._getAddressFromSigningKey(signingKey)
-      const script = this._getScriptFromAddress(address)
-      const scriptType = this._chronikScriptType(address)
-      const scriptHex = script.getPublicKeyHash().toString('hex')
-      const utxos = await this.fetchUtxos(scriptType, scriptHex)
-      const parsedUtxos = utxos.map(utxo => this.toParsedUtxo(utxo))
-      this.keys[userId] = {
-        signingKey,
-        address,
-        script,
-        scriptHex,
-        scriptType,
-        utxos: parsedUtxos,
-      }
-      this.accounts[accountId]
-        ? this.accounts[accountId].push(userId)
-        : (this.accounts[accountId] = [userId])
-      this.chronikWs.subscribe(scriptType, scriptHex)
+      this.accounts[accountId]?.push(userId) ||
+        (this.accounts[accountId] = [userId])
+      // Set up new wallet and subscribe to Chronik WS
+      const walletKey = new WalletKey(
+        accountId,
+        userId,
+        hdPrivKey,
+        this.chronik,
+        this.chronikWs,
+      )
+      await walletKey.init()
+      this.wallets.set(userId, walletKey)
+      // set the Chronik WS message handler for this wallet
+      this.chronikWs.subscribe(walletKey.scriptType, walletKey.scriptPayload)
     } catch (e: any) {
       throw new Error(`loadKey: ${userId}: ${e.message}`)
     }
@@ -154,6 +350,7 @@ export class WalletManager extends EventEmitter {
     const idx = this.accounts[oldAccountId].findIndex(id => id == userId)
     this.accounts[oldAccountId].splice(idx, 1)
     this.accounts[newAccountId].push(userId)
+    this.wallets.get(userId)!.accountId = newAccountId
   }
   /** Process Give/Withdraw tx for the provided `fromUserId` */
   genTx = async (
@@ -162,23 +359,63 @@ export class WalletManager extends EventEmitter {
       fromAccountId,
       toUserId,
       outAddress,
-      sats,
+      outSats,
     }: {
       fromAccountId: string
       toUserId?: string
       outAddress?: string
-      sats: number
+      outSats: number
     },
   ) => {
+    const tx = new Transaction()
+    const signingKeys: PrivateKey[] = []
+    // wallets used to fund the transaction
+    const userIds = this.accounts[fromAccountId]
     try {
-      switch (type) {
-        case 'give':
-          // assert(toUserId, "Invalid or null user ID provided");
-          const key = this.keys[toUserId]
-          return this._genTx(this.accounts[fromAccountId], key.address, sats)
-        case 'withdraw':
-          // assert(outAddress, "Invalid or null withdrawal address provided");
-          return this._genTx(this.accounts[fromAccountId], outAddress, sats)
+      for (const userId of userIds) {
+        const wallet = this.wallets.get(userId)
+        signingKeys.push(wallet.signingKey)
+        for (const utxo of wallet.utxos) {
+          tx.addInput(WalletTools.toPKHInput(utxo, wallet.script))
+          if (tx.inputAmount > outSats) {
+            break
+          }
+        }
+        // May need to continue adding utxos from other keys
+        if (tx.inputAmount < outSats) {
+          continue
+        }
+        tx.feePerByte(config.wallet.tx.feeRate)
+        // Set current key's address as change address
+        tx.change(wallet.address)
+        // Set up output script
+        let outScript: Script
+        switch (type) {
+          case 'give':
+            outScript = this.wallets.get(toUserId)?.script
+            break
+          case 'withdraw':
+            outScript = WalletTools.getScriptFromAddress(outAddress)
+            break
+        }
+        // add appropriate output with tx fee subtracted if required
+        const txFee = tx._estimateSize() * config.wallet.tx.feeRate
+        tx.addOutput(
+          WalletTools.toOutput(
+            // subtract fee from output amount if required
+            outSats + txFee > tx.inputAmount ? outSats - txFee : outSats,
+            outScript,
+          ),
+        )
+        // sign and verify tx
+        tx.sign(signingKeys)
+        const verified = tx.verify()
+        switch (typeof verified) {
+          case 'boolean':
+            return tx
+          case 'string':
+            throw new Error(verified)
+        }
       }
     } catch (e: any) {
       throw new Error(`genTx: ${e.message}`)
@@ -204,10 +441,10 @@ export class WalletManager extends EventEmitter {
     const signingKeys: PrivateKey[] = []
     try {
       for (const userId of userIds) {
-        const key = this.keys[userId]
-        signingKeys.push(key.signingKey)
-        for (const utxo of key.utxos) {
-          tx.addInput(this._toPKHInput(utxo, key.script))
+        const wallet = this.wallets.get(userId)
+        signingKeys.push(wallet.signingKey)
+        for (const utxo of wallet.utxos) {
+          tx.addInput(WalletTools.toPKHInput(utxo, wallet.script))
           if (tx.inputAmount > outSats) {
             break
           }
@@ -218,11 +455,11 @@ export class WalletManager extends EventEmitter {
         }
         tx.feePerByte(config.wallet.tx.feeRate)
         // Set current key's address as change address
-        tx.change(key.address)
-        const outScript = this._getScriptFromAddress(outAddress)
+        tx.change(wallet.address)
+        const outScript = WalletTools.getScriptFromAddress(outAddress)
         const txFee = tx._estimateSize() * config.wallet.tx.feeRate
         tx.addOutput(
-          this._toOutput(
+          WalletTools.toOutput(
             // subtract fee from output amount if required
             outSats + txFee > tx.inputAmount ? outSats - txFee : outSats,
             outScript,
@@ -244,80 +481,19 @@ export class WalletManager extends EventEmitter {
   /**
    * Ensure Chronik `AddedToMempool` doesn't corrupt the in-memory UTXO set
    */
-  private _isExistingUtxo = (userId: string, utxo: Wallet.ParsedUtxo) => {
-    return this.keys[userId].utxos.find(existing => {
-      return existing.txid == utxo.txid && existing.outIdx == utxo.outIdx
-    })
-  }
-  /** Fetch UTXOs from Chronik API for provided script data */
-  fetchUtxos = async (
-    scriptType: ScriptType,
-    scriptHex: string,
-  ): Promise<Utxo[]> => {
-    try {
-      const scriptEndpoint = this.chronik.script(scriptType, scriptHex)
-      const [result] = await scriptEndpoint.utxos()
-      return result?.utxos || []
-    } catch (e: any) {
-      throw new Error(`fetchUtxos: ${e.message}`)
-    }
-  }
-  /** Remove spent and otherwise invalid UTXOs from user's `WalletKey` */
-  private _reconcileUtxos = async (userId: string) => {
-    try {
-      const utxos = this.keys[userId].utxos
-      // const outpoints = utxos.map(utxo => WalletManager.toOutpoint(utxo));
-      const result = await this.chronik.validateUtxos(utxos)
-      this.keys[userId].utxos = utxos.filter((utxo, i) => {
-        switch (result[i].state) {
-          case 'NO_SUCH_TX':
-          case 'NO_SUCH_OUTPUT':
-          case 'SPENT':
-            return false
-        }
-        return true
-      })
-    } catch (e: any) {
-      throw new Error(`_reconcileUtxos: ${e.message}`)
-    }
-  }
-  /**
-   * Derive single `PrivateKey` from account's `HDPrivateKey`
-   */
-  private _getDerivedSigningKey = (hdPrivKey: HDPrivateKey): PrivateKey => {
-    try {
-      return hdPrivKey
-        .deriveChild(WALLET.PURPOSE, true)
-        .deriveChild(WALLET.COINTYPE, true)
-        .deriveChild(0, true)
-        .deriveChild(0)
-        .deriveChild(0).privateKey
-    } catch (e: any) {
-      throw new Error(`getDerivedPrivKey: ${e.message}`)
-    }
-  }
-  /**
-   * Convert `PrivateKey` into `Address`
-   */
-  private _getAddressFromSigningKey = (signingKey: PrivateKey): Address => {
-    try {
-      return signingKey.toAddress()
-    } catch (e: any) {
-      throw new Error(`_getAddressFromSigningKey: ${e.message}`)
-    }
-  }
-  /** Convert `Address` string or class to `Script` */
-  private _getScriptFromAddress = (address: string | Address): Script => {
-    try {
-      return Script.fromAddress(address)
-    } catch (e: any) {
-      throw new Error(`_getScriptFromAddress: ${e.message}`)
-    }
+  private isExistingUtxo = (userId: string, utxo: Wallet.ParsedUtxo) => {
+    const utxos = this.wallets.get(userId)?.utxos
+    return utxos.length > 0
+      ? utxos.some(
+          existing =>
+            existing.txid == utxo.txid && existing.outIdx == utxo.outIdx,
+        )
+      : false
   }
   /** Detect and process Chronik WS messages */
-  private _chronikHandleWsMessage = async (msg: SubscribeMsg) => {
+  chronikHandleWsMessage = async (msg: SubscribeMsg) => {
     try {
-      let tx: Tx
+      let tx: ChronikTx
       if (msg.type == 'BlockConnected') {
         const block = await this.chronik.block(msg.blockHash)
         tx = block.txs[0]
@@ -330,17 +506,19 @@ export class WalletManager extends EventEmitter {
         return
       }
       // process each tx output
-      for (let i = 0; i < tx.outputs.length; i++) {
-        const output = tx.outputs[i]
+      let i = -1
+      for await (const output of asyncCollection(tx.outputs)) {
+        // increment output index
+        // if first output, this will value start at 0
+        i++
         // find userId/key matching output scriptHex
-        for (const userIds of Object.values(this.accounts)) {
-          const userId = userIds.find(userId => {
-            const userScriptHex = this.keys[userId].script.toHex()
-            if (output.outputScript == userScriptHex) {
-              // New tx has an output that matches one of our wallets
-              return true
-            }
-          })
+        for await (const userIds of asyncCollection(
+          Object.values(this.accounts),
+        )) {
+          const userId = userIds.find(
+            userId =>
+              this.wallets.get(userId)?.scriptHex == output.outputScript,
+          )
           if (!userId) {
             continue
           }
@@ -348,67 +526,35 @@ export class WalletManager extends EventEmitter {
           const parsedUtxo = {
             txid: tx.txid,
             outIdx: i,
-            value: tx.outputs[i].value,
+            value: output.value,
+          } as Wallet.ParsedUtxo
+          // add metadata for coinbase tx if needed
+          if (tx.isCoinbase) {
+            parsedUtxo.isCoinbase = true
+            parsedUtxo.blockHeight = tx.block?.height
           }
           /**
            * Give transactions generate duplicate Chronik WS messages.
            * This conditional ensures we do not save duplicate UTXOs
            */
-          if (this._isExistingUtxo(userId, parsedUtxo)) {
+          if (this.isExistingUtxo(userId, parsedUtxo)) {
             break
           }
-          this.keys[userId].utxos.push(parsedUtxo)
+          // push the utxo to the wallet's utxo set
+          this.wallets.get(userId)!.utxos.push(parsedUtxo)
           // do not emit change outputs as deposits
           if (WalletManager.isChangeOutput(i, tx.outputs)) {
             return
           }
-          this.emit(
-            msg.type,
-            { ...parsedUtxo, userId } as Wallet.AccountUtxo,
-            tx.isCoinbase,
-          )
+          await this.walletDepositReceived({
+            ...parsedUtxo,
+            userId,
+          } as Wallet.AccountUtxo)
           return
         }
       }
     } catch (e: any) {
       throw new Error(`_chronikHandleWsMessage: ${e.message}`)
-    }
-  }
-  /** Return the Chronik `ScriptType` from provided `Address` */
-  private _chronikScriptType = (address: Address): ScriptType => {
-    switch (true) {
-      case address.isPayToPublicKeyHash():
-        return 'p2pkh'
-      case address.isPayToScriptHash():
-        return 'p2sh'
-      default:
-        return 'other'
-    }
-  }
-  toParsedUtxo = (utxo: Utxo) => {
-    const { txid, outIdx } = utxo.outpoint
-    const { value } = utxo
-    return { txid, outIdx, value }
-  }
-  /** Create Bitcore-compatible P2PKH `Transaction.Input` */
-  private _toPKHInput = (utxo: Wallet.ParsedUtxo, script: Script) => {
-    try {
-      return new Transaction.Input.PublicKeyHash({
-        prevTxId: utxo.txid,
-        outputIndex: utxo.outIdx,
-        output: this._toOutput(Number(utxo.value), script),
-        script,
-      })
-    } catch (e: any) {
-      throw new Error(`_toPKHInput: ${e.message}`)
-    }
-  }
-  /** Create a Bitcore-compatible `Transaction.Output` */
-  private _toOutput = (satoshis: number, script: Script) => {
-    try {
-      return new Transaction.Output({ satoshis, script })
-    } catch (e: any) {
-      throw new Error(`_toOutput: ${e.message}`)
     }
   }
   /** Generates a new 12-word mnemonic phrase */
@@ -497,6 +643,7 @@ export class WalletManager extends EventEmitter {
         }),
       )
     }
+    // TODO: add check for tx size (max is 100KB)
     // sign and return tx
     tx.sign(signingKey)
     return tx
@@ -508,7 +655,7 @@ export class WalletManager extends EventEmitter {
    * @param outputs - the outputs of the transaction, in Chronik format
    * @returns true if the output is the change output, false otherwise.
    */
-  static isChangeOutput = (outIdx: number, outputs: Tx['outputs']) =>
+  static isChangeOutput = (outIdx: number, outputs: ChronikTx['outputs']) =>
     outIdx == outputs.length - 1
   static WITHDRAW_CHANGE_OUTIDX = 1
   static GIVE_CHANGE_OUTIDX = 1
